@@ -2,18 +2,17 @@
 Dawn Validator BOT
 
 - Download Extension Here : [Dawn Validator](https://chromewebstore.google.com/detail/dawn-validator-chrome-ext/fpdkjdnhkakefebpekbdhillbhonfjjp?hl=en)
-- Use Code : 02lt4r
+- Use Code `02lt4r`
 
 ## Features
 
   - Auto Get Account Information
-  - Auto Run With [Monosans](https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt) Proxy - Choose 1
-  - Auto Run With Private Proxy - Choose 2
-  - Auto Run Without Proxy - Choose 3
-  - Auto Send Keep-Alive Every 5 Minutes
+  - Auto Run With [Monosans](https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt) Proxy - `Choose 1`
+  - Auto Run With Private Proxy - `Choose 2`
+  - Auto Run Without Proxy - `Choose 3`
+  - Auto Rotate Invalid Proxies - `y` or `n`
+  - Auto Send Keep-Alive Every 10 Minutes
   - Multi Accounts With Threads
-
-Note: Dawn Server may be experiencing problems receiving requests, please be patient.
 
 ## Requiremnets
 
