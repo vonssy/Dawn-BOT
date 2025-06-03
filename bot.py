@@ -15,14 +15,14 @@ class Dawn:
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "cross-site",
-            "User-Agent": FakeUserAgent().random
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
         }
         self.BASE_API = "https://ext-api.dawninternet.com"
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
-        self.access_tokens = {}
-        self.app_ids = {}
+        self.tokens = {}
+        self.app_id = {}
 
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -145,8 +145,6 @@ class Dawn:
         )
 
     def print_question(self):
-        rotate = False
-
         while True:
             try:
                 print(f"{Fore.WHITE + Style.BRIGHT}1. Run With Monosans Proxy{Style.RESET_ALL}")
@@ -167,6 +165,7 @@ class Dawn:
             except ValueError:
                 print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number (1, 2 or 3).{Style.RESET_ALL}")
 
+        rotate = False
         if choose in [1, 2]:
             while True:
                 rotate = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Style.RESET_ALL}").strip()
@@ -178,17 +177,25 @@ class Dawn:
 
         return choose, rotate
 
+    async def check_connection(self, email: str, proxy=None):
+        try:
+            response = await asyncio.to_thread(requests.get, url=self.BASE_API, headers={}, proxy=proxy, timeout=60, impersonate="chrome110")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return self.print_message(email, proxy, Fore.RED, f"Connection Not 200 OK: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
+
     async def user_data(self, email: str, proxy=None, retries=5):
-        url = f"{self.BASE_API}/api/atom/v1/userreferral/getpoint?appid={self.app_ids[email]}"
+        url = f"{self.BASE_API}/api/atom/v1/userreferral/getpoint?appid={self.app_id[email]}"
         headers = {
             **self.headers,
-            "Authorization": f"Berear {self.access_tokens[email]}",
+            "Authorization": f"Berear {self.tokens[email]}",
             "Content-Type": "application/json"
         }
 
         for attempt in range(retries):
             try:
-                response = await asyncio.to_thread(requests.get, url=url, headers=headers, proxy=proxy, timeout=120, impersonate="chrome110")
+                response = await asyncio.to_thread(requests.get, url=url, headers=headers, proxy=proxy, timeout=60, impersonate="chrome110")
                 if response.status_code == 400:
                     return self.print_message(email, proxy, Fore.RED, f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}Invalid Token or Already Expired")
                 response.raise_for_status()
@@ -200,18 +207,18 @@ class Dawn:
                 return self.print_message(email, proxy, Fore.RED, f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
 
     async def send_keepalive(self, email: str, proxy=None, retries=5):
-        url = f"{self.BASE_API}/chromeapi/dawn/v1/userreward/keepalive?appid={self.app_ids[email]}"
+        url = f"{self.BASE_API}/chromeapi/dawn/v1/userreward/keepalive?appid={self.app_id[email]}"
         data = json.dumps({"username":email, "extensionid":"fpdkjdnhkakefebpekbdhillbhonfjjp", "numberoftabs":0, "_v":"1.1.7"})
         headers = {
             **self.headers,
-            "Authorization": f"Berear {self.access_tokens[email]}",
+            "Authorization": f"Berear {self.tokens[email]}",
             "Content-Length": str(len(data)),
             "Content-Type": "application/json"
         }
 
         for attempt in range(retries):
             try:
-                response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxy=proxy, timeout=120, impersonate="chrome110")
+                response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxy=proxy, timeout=60, impersonate="chrome110")
                 if response.status_code == 400:
                     return self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Invalid Token or Already Expired")
                 response.raise_for_status()
@@ -222,12 +229,35 @@ class Dawn:
                     continue
                 return self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
             
+    async def process_check_connection(self, email: str, use_proxy: bool, rotate_proxy: bool):
+        proxy = self.get_next_proxy_for_account(email) if use_proxy else None
+
+        if rotate_proxy:
+            while True:
+                is_valid = await self.check_connection(email, proxy)
+                if is_valid and is_valid.get("message") == "ok":
+                    self.print_message(email, proxy, Fore.GREEN, "Connection 200 OK")
+                    return True
+                
+                proxy = self.rotate_proxy_for_account(email)
+                await asyncio.sleep(5)
+                continue
+
+        while True:
+            is_valid = await self.check_connection(email, proxy)
+            if is_valid and is_valid.get("message") == "ok":
+                self.print_message(email, proxy, Fore.GREEN, "Connection 200 OK")
+                return True
+            
+            await asyncio.sleep(5)
+            continue
+            
     async def process_user_earning(self, email: str, use_proxy: bool):
         while True:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
 
             user = await self.user_data(email, proxy)
-            if user and user.get("success", False):
+            if user and user.get("message") == "success":
                 referral_point = user.get("data", {}).get("referralPoint", {}).get("commission", 0)
                 reward_point = user.get("data", {}).get("rewardPoint", {})
 
@@ -236,11 +266,12 @@ class Dawn:
                 )
 
                 total_points = referral_point + reward_points
+                
                 self.print_message(email, proxy, Fore.WHITE, f"Earning {total_points:.0f} PTS")
 
             await asyncio.sleep(10 * 60) 
 
-    async def process_send_keepalive(self, email: str, use_proxy: bool, rotate_proxy: bool):
+    async def process_send_keepalive(self, email: str, use_proxy: bool):
         while True:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
 
@@ -253,17 +284,14 @@ class Dawn:
             )
 
             keepalive = await self.send_keepalive(email, proxy)
-            if keepalive and keepalive.get("success", False):
-                server_name = keepalive.get("data", {}).get("servername", "N/A")
+            if keepalive and keepalive.get("success"):
+                server_name = keepalive.get("data", {}).get("servername") or "N/A"
 
                 self.print_message(email, proxy, Fore.GREEN, "PING Success "
-                f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
-                f"{Fore.CYAN + Style.BRIGHT} Server Name: {Style.RESET_ALL}"
-                f"{Fore.WHITE + Style.BRIGHT}{server_name}{Style.RESET_ALL}"
+                    f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
+                    f"{Fore.CYAN + Style.BRIGHT} Server Name: {Style.RESET_ALL}"
+                    f"{Fore.WHITE + Style.BRIGHT}{server_name}{Style.RESET_ALL}"
                 )
-            else:
-                if rotate_proxy:
-                    proxy = self.rotate_proxy_for_account(email)
 
             print(
                 f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
@@ -275,11 +303,13 @@ class Dawn:
             await asyncio.sleep(10 * 60)
         
     async def process_accounts(self, email: str, use_proxy: bool, rotate_proxy: bool):
-        tasks = [
-            asyncio.create_task(self.process_user_earning(email, use_proxy)),
-            asyncio.create_task(self.process_send_keepalive(email, use_proxy, rotate_proxy))
-        ]
-        await asyncio.gather(*tasks)
+        is_valid = await self.process_check_connection(email, use_proxy, rotate_proxy)
+        if is_valid:
+            tasks = [
+                asyncio.create_task(self.process_user_earning(email, use_proxy)),
+                asyncio.create_task(self.process_send_keepalive(email, use_proxy))
+            ]
+            await asyncio.gather(*tasks)
     
     async def main(self):
         try:
@@ -312,10 +342,11 @@ class Dawn:
                 token = account["Token"]
 
                 if not "@" in email or not token:
+                    self.log("Error")
                     continue
 
-                self.access_tokens[email] = token
-                self.app_ids[email] = self.generate_app_id()
+                self.tokens[email] = token
+                self.app_id[email] = self.generate_app_id()
 
                 tasks.append(asyncio.create_task(self.process_accounts(email, use_proxy, rotate_proxy)))
 
