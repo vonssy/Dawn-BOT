@@ -1,13 +1,14 @@
 # Dawn Validator BOT
 Dawn Validator BOT
 
-- Download Extension Here : [Dawn Validator](https://chromewebstore.google.com/detail/dawn-validator-chrome-ext/fpdkjdnhkakefebpekbdhillbhonfjjp?hl=en)
+- Register Here : [Dawn Validator](https://dashboard.dawninternet.com/signup)
 - Use Code `02lt4r`
+- Download [Extension](https://chromewebstore.google.com/detail/dawn-validator-chrome-ext/fpdkjdnhkakefebpekbdhillbhonfjjp?hl=en)
 
 ## Features
 
   - Auto Get Account Information
-  - Auto Run With [Monosans](https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt) Proxy - `Choose 1`
+  - Auto Run With [Free Proxyscrape](https://proxyscrape.com/free-proxy-list) Proxy - `Choose 1`
   - Auto Run With Private Proxy - `Choose 2`
   - Auto Run Without Proxy - `Choose 3`
   - Auto Rotate Invalid Proxies - `y` or `n`

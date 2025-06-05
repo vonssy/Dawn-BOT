@@ -15,7 +15,7 @@ class Dawn:
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "cross-site",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+            "User-Agent": FakeUserAgent().random
         }
         self.BASE_API = "https://ext-api.dawninternet.com"
         self.proxies = []
@@ -68,18 +68,18 @@ class Dawn:
         filename = "proxy.txt"
         try:
             if use_proxy_choice == 1:
-                response = await asyncio.to_thread(requests.get, "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt")
+                response = await asyncio.to_thread(requests.get, "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text")
                 response.raise_for_status()
                 content = response.text
                 with open(filename, 'w') as f:
                     f.write(content)
-                self.proxies = content.splitlines()
+                self.proxies = [line.strip() for line in content.splitlines() if line.strip()]
             else:
                 if not os.path.exists(filename):
                     self.log(f"{Fore.RED + Style.BRIGHT}File {filename} Not Found.{Style.RESET_ALL}")
                     return
                 with open(filename, 'r') as f:
-                    self.proxies = f.read().splitlines()
+                    self.proxies = [line.strip() for line in f.read().splitlines() if line.strip()]
             
             if not self.proxies:
                 self.log(f"{Fore.RED + Style.BRIGHT}No Proxies Found.{Style.RESET_ALL}")
@@ -122,14 +122,21 @@ class Dawn:
         app_id = prefix + uuid.uuid4().hex[len(prefix):]
         return app_id
     
+    def generate_keepalive_payload(self, email: str):
+        payload = {
+            "username":email,
+            "extensionid":"fpdkjdnhkakefebpekbdhillbhonfjjp",
+            "numberoftabs":0,
+            "_v":"1.1.7"
+        }
+
+        return payload
+    
     def mask_account(self, account):
         if "@" in account:
             local, domain = account.split('@', 1)
             mask_account = local[:3] + '*' * 3 + local[-3:]
             return f"{mask_account}@{domain}"
-        
-        mask_account = account[:3] + '*' * 3 + account[-3:]
-        return mask_account
     
     def print_message(self, email, proxy, color, message):
         self.log(
@@ -147,18 +154,18 @@ class Dawn:
     def print_question(self):
         while True:
             try:
-                print(f"{Fore.WHITE + Style.BRIGHT}1. Run With Monosans Proxy{Style.RESET_ALL}")
+                print(f"{Fore.WHITE + Style.BRIGHT}1. Run With Free Proxyscrape Proxy{Style.RESET_ALL}")
                 print(f"{Fore.WHITE + Style.BRIGHT}2. Run With Private Proxy{Style.RESET_ALL}")
                 print(f"{Fore.WHITE + Style.BRIGHT}3. Run Without Proxy{Style.RESET_ALL}")
                 choose = int(input(f"{Fore.BLUE + Style.BRIGHT}Choose [1/2/3] -> {Style.RESET_ALL}").strip())
 
                 if choose in [1, 2, 3]:
                     proxy_type = (
-                        "Run With Monosans Proxy" if choose == 1 else 
-                        "Run With Private Proxy" if choose == 2 else 
-                        "Run Without Proxy"
+                        "With Free Proxyscrape" if choose == 1 else 
+                        "With Private" if choose == 2 else 
+                        "Without"
                     )
-                    print(f"{Fore.GREEN + Style.BRIGHT}{proxy_type} Selected.{Style.RESET_ALL}")
+                    print(f"{Fore.GREEN + Style.BRIGHT}Run {proxy_type} Proxy Selected.{Style.RESET_ALL}")
                     break
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}Please enter either 1, 2 or 3.{Style.RESET_ALL}")
@@ -208,7 +215,7 @@ class Dawn:
 
     async def send_keepalive(self, email: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/chromeapi/dawn/v1/userreward/keepalive?appid={self.app_id[email]}"
-        data = json.dumps({"username":email, "extensionid":"fpdkjdnhkakefebpekbdhillbhonfjjp", "numberoftabs":0, "_v":"1.1.7"})
+        data = json.dumps(self.generate_keepalive_payload(email))
         headers = {
             **self.headers,
             "Authorization": f"Berear {self.tokens[email]}",
@@ -337,18 +344,26 @@ class Dawn:
             self.log(f"{Fore.CYAN + Style.BRIGHT}={Style.RESET_ALL}"*75)
 
             tasks = []
-            for account in accounts:
-                email = account["Email"]
-                token = account["Token"]
+            for idx, account in enumerate(accounts, start=1):
+                if account:
+                    email = account["Email"]
+                    token = account["Token"]
 
-                if not "@" in email or not token:
-                    self.log("Error")
-                    continue
+                    if not "@" in email or not token:
+                        self.log(
+                            f"{Fore.CYAN + Style.BRIGHT}[ Account: {Style.RESET_ALL}"
+                            f"{Fore.WHITE + Style.BRIGHT}{idx}{Style.RESET_ALL}"
+                            f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
+                            f"{Fore.CYAN + Style.BRIGHT}Status:{Style.RESET_ALL}"
+                            f"{Fore.RED + Style.BRIGHT} Invalid Account Data {Style.RESET_ALL}"
+                            f"{Fore.CYAN + Style.BRIGHT}]{Style.RESET_ALL}"
+                        )
+                        continue
 
-                self.tokens[email] = token
-                self.app_id[email] = self.generate_app_id()
+                    self.tokens[email] = token
+                    self.app_id[email] = self.generate_app_id()
 
-                tasks.append(asyncio.create_task(self.process_accounts(email, use_proxy, rotate_proxy)))
+                    tasks.append(asyncio.create_task(self.process_accounts(email, use_proxy, rotate_proxy)))
 
             await asyncio.gather(*tasks)
 
