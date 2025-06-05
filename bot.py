@@ -264,7 +264,7 @@ class Dawn:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
 
             user = await self.user_data(email, proxy)
-            if user and user.get("message") == "success":
+            if isinstance(user, dict) and user.get("message") == "success":
                 referral_point = user.get("data", {}).get("referralPoint", {}).get("commission", 0)
                 reward_point = user.get("data", {}).get("rewardPoint", {})
 
@@ -291,7 +291,7 @@ class Dawn:
             )
 
             keepalive = await self.send_keepalive(email, proxy)
-            if keepalive and keepalive.get("success"):
+            if isinstance(keepalive, dict) and keepalive.get("success"):
                 server_name = keepalive.get("data", {}).get("servername") or "N/A"
 
                 self.print_message(email, proxy, Fore.GREEN, "PING Success "
