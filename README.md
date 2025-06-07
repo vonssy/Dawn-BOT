@@ -18,7 +18,7 @@ Dawn Validator BOT
 ## Requiremnets
 
 - Make sure you have Python3.9 or higher installed and pip.
-- 2captcha key (opsional)
+- 2captcha key (optional)
 
 ## Instalation
 
@@ -36,6 +36,11 @@ Dawn Validator BOT
    ```
 
 ## Configuration
+
+- **2captcha_key.txt:** You will find the file `2captcha_key.txt` inside the project directory. Make sure `2captcha_key.txt` contains data that matches the format expected by the script. Here are examples of file formats:
+  ```bash
+    your_2captcha_key
+  ```
 
 - **accounts.json:** You will find the file `accounts.json` inside the project directory. Make sure `accounts.json` contains data that matches the format expected by the script. Here are examples of file formats:
   ```json

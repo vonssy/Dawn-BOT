@@ -222,7 +222,7 @@ class Dawn:
         for attempt in range(retries):
             try:
                 if self.CAPTCHA_KEY is None:
-                        return None
+                    return None
                 
                 response = await asyncio.to_thread(requests.post, "https://2captcha.com/in.php", data={
                     'key': self.CAPTCHA_KEY,
