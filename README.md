@@ -36,18 +36,24 @@ Dawn Validator BOT
 
 ## Configuration
 
-- **accounts.json:** You will find the file `accounts.json` inside the project directory. Make sure `accounts.json` contains data that matches the format expected by the script. Here are examples of file formats:
-  ```bash
-  [
-      {
-          "Email": "your_email_address 1",
-          "Token": "your_berear_token 1"
-      },
-      {
-          "Email": "your_email_address 2",
-          "Token": "your_berear_token 2"
-      }
-  ]
+### Screenshots
+
+<div style="text-align: center;">
+  <img src="image.png" alt="Image" width="500"/>
+</div>
+
+- **tokens.json:** You will find the file `tokens.json` inside the project directory. Make sure `tokens.json` contains data that matches the format expected by the script. Here are examples of file formats:
+  ```json
+    [
+        {
+            "Email": "your_email_address 1",
+            "Token": "your_berear_token 1"
+        },
+        {
+            "Email": "your_email_address 2",
+            "Token": "your_berear_token 2"
+        }
+    ]
   ```
 
 - **proxy.txt:** You will find the file `proxy.txt` inside the project directory. Make sure `proxy.txt` contains data that matches the format expected by the script. Here are examples of file formats:

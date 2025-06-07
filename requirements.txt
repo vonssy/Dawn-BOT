@@ -1,5 +1,4 @@
-aiohttp
-aiohttp-socks
-fake-useragent
-colorama
-pytz
+curl-cffi==0.7.1
+fake-useragent==1.5.1
+colorama==0.4.6
+pytz==2024.1

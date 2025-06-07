@@ -50,7 +50,7 @@ class Dawn:
         return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
     
     def load_accounts(self):
-        filename = "accounts.json"
+        filename = "tokens.json"
         try:
             if not os.path.exists(filename):
                 self.log(f"{Fore.RED}File {filename} Not Found.{Style.RESET_ALL}")
@@ -123,14 +123,17 @@ class Dawn:
         return app_id
     
     def generate_keepalive_payload(self, email: str):
-        payload = {
-            "username":email,
-            "extensionid":"fpdkjdnhkakefebpekbdhillbhonfjjp",
-            "numberoftabs":0,
-            "_v":"1.1.7"
-        }
+        try:
+            payload = {
+                "username":email,
+                "extensionid":"fpdkjdnhkakefebpekbdhillbhonfjjp",
+                "numberoftabs":0,
+                "_v":"1.1.8"
+            }
 
-        return payload
+            return payload
+        except Exception as e:
+            raise Exception(f"Generate Req Payload Failed: {str(e)}")
     
     def mask_account(self, account):
         if "@" in account:
@@ -186,7 +189,7 @@ class Dawn:
 
     async def check_connection(self, email: str, proxy=None):
         try:
-            response = await asyncio.to_thread(requests.get, url=self.BASE_API, headers={}, proxy=proxy, timeout=60, impersonate="chrome110")
+            response = await asyncio.to_thread(requests.get, url=self.BASE_API, headers={}, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
             response.raise_for_status()
             return response.json()
         except Exception as e:
@@ -199,10 +202,9 @@ class Dawn:
             "Authorization": f"Berear {self.tokens[email]}",
             "Content-Type": "application/json"
         }
-
         for attempt in range(retries):
             try:
-                response = await asyncio.to_thread(requests.get, url=url, headers=headers, proxy=proxy, timeout=60, impersonate="chrome110")
+                response = await asyncio.to_thread(requests.get, url=url, headers=headers, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
                 if response.status_code == 400:
                     return self.print_message(email, proxy, Fore.RED, f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}Invalid Token or Already Expired")
                 response.raise_for_status()
@@ -222,10 +224,9 @@ class Dawn:
             "Content-Length": str(len(data)),
             "Content-Type": "application/json"
         }
-
         for attempt in range(retries):
             try:
-                response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxy=proxy, timeout=60, impersonate="chrome110")
+                response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
                 if response.status_code == 400:
                     return self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Invalid Token or Already Expired")
                 response.raise_for_status()
@@ -237,25 +238,17 @@ class Dawn:
                 return self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
             
     async def process_check_connection(self, email: str, use_proxy: bool, rotate_proxy: bool):
-        proxy = self.get_next_proxy_for_account(email) if use_proxy else None
-
-        if rotate_proxy:
-            while True:
-                is_valid = await self.check_connection(email, proxy)
-                if is_valid and is_valid.get("message") == "ok":
-                    self.print_message(email, proxy, Fore.GREEN, "Connection 200 OK")
-                    return True
-                
-                proxy = self.rotate_proxy_for_account(email)
-                await asyncio.sleep(5)
-                continue
-
         while True:
+            proxy = self.get_next_proxy_for_account(email) if use_proxy else None
+
             is_valid = await self.check_connection(email, proxy)
             if is_valid and is_valid.get("message") == "ok":
                 self.print_message(email, proxy, Fore.GREEN, "Connection 200 OK")
                 return True
             
+            if rotate_proxy:
+                proxy = self.rotate_proxy_for_account(email)
+
             await asyncio.sleep(5)
             continue
             
