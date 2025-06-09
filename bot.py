@@ -205,9 +205,6 @@ class Dawn:
         for attempt in range(retries):
             try:
                 response = await asyncio.to_thread(requests.get, url=url, headers=headers, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
-                if response.status_code == 400:
-                    self.print_message(email, proxy, Fore.RED, f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}Invalid Token or Already Expired")
-                    return None
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
@@ -230,9 +227,6 @@ class Dawn:
         for attempt in range(retries):
             try:
                 response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
-                if response.status_code == 400:
-                    self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Invalid Token or Already Expired")
-                    return None
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
