@@ -311,12 +311,14 @@ class Dawn:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                return self.log(
+                self.log(
                     f"{Fore.CYAN+Style.BRIGHT}Error    :{Style.RESET_ALL}"
                     f"{Fore.RED+Style.BRIGHT} GET Puzzle Id Failed {Style.RESET_ALL}"
                     f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
                     f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
                 )
+
+        return None
 
     async def get_puzzle_image(self, email: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/chromeapi/dawn/v1/puzzle/get-puzzle-image?puzzle_id={self.puzzle_id[email]}&appid={self.app_id[email]}"
@@ -329,12 +331,14 @@ class Dawn:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                return self.log(
+                self.log(
                     f"{Fore.CYAN+Style.BRIGHT}Error    :{Style.RESET_ALL}"
                     f"{Fore.RED+Style.BRIGHT} GET Puzzle Image Failed {Style.RESET_ALL}"
                     f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
                     f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
                 )
+
+        return None
 
     async def user_login(self, email: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/chromeapi/dawn/v1/user/login/v2?appid={self.app_id[email]}"
@@ -353,12 +357,14 @@ class Dawn:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                return self.log(
+                self.log(
                     f"{Fore.CYAN+Style.BRIGHT}Error    :{Style.RESET_ALL}"
                     f"{Fore.RED+Style.BRIGHT} Login Failed {Style.RESET_ALL}"
                     f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
                     f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
                 )
+
+        return None
             
     async def process_check_connection(self, email: str, use_proxy: bool, rotate_proxy: bool):
         while True:
