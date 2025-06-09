@@ -193,7 +193,9 @@ class Dawn:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            return self.print_message(email, proxy, Fore.RED, f"Connection Not 200 OK: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
+            self.print_message(email, proxy, Fore.RED, f"Connection Not 200 OK: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
+
+        return None
 
     async def user_data(self, email: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/api/atom/v1/userreferral/getpoint?appid={self.app_id[email]}"

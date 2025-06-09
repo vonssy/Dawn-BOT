@@ -293,12 +293,14 @@ class Dawn:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            return self.log(
+            self.log(
                 f"{Fore.CYAN+Style.BRIGHT}Error    :{Style.RESET_ALL}"
                 f"{Fore.RED+Style.BRIGHT} Connection Not 200 OK {Style.RESET_ALL}"
                 f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
                 f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
             )
+
+        return None
 
     async def get_puzzle_id(self, email: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/chromeapi/dawn/v1/puzzle/get-puzzle?appid={self.app_id[email]}"
