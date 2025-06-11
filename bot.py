@@ -286,8 +286,8 @@ class Dawn:
             )
 
             keepalive = await self.send_keepalive(email, proxy)
-            if isinstance(keepalive, dict) and keepalive.get("success"):
-                server_name = keepalive.get("data", {}).get("servername") or "N/A"
+            if isinstance(keepalive, dict) and keepalive.get("message") == "ping recored":
+                server_name = keepalive.get("s") or "N/A"
 
                 self.print_message(email, proxy, Fore.GREEN, "PING Success "
                     f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
