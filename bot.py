@@ -1,6 +1,6 @@
 from curl_cffi import requests
 from fake_useragent import FakeUserAgent
-from datetime import datetime
+from datetime import datetime, timezone
 from colorama import *
 import asyncio, json, os, pytz, uuid
 
@@ -18,11 +18,15 @@ class Dawn:
             "User-Agent": FakeUserAgent().random
         }
         self.BASE_API = "https://ext-api.dawninternet.com"
+        self.CAPTCHA_KEY = None
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
-        self.tokens = {}
+        self.password = {}
         self.app_id = {}
+        self.puzzle_id = {}
+        self.puzzle_image = {}
+        self.answer = {}
 
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -37,7 +41,7 @@ class Dawn:
     def welcome(self):
         print(
             f"""
-        {Fore.GREEN + Style.BRIGHT}Auto Ping {Fore.BLUE + Style.BRIGHT}Dawn - BOT
+        {Fore.GREEN + Style.BRIGHT}Auto Setup {Fore.BLUE + Style.BRIGHT}Dawn - BOT
             """
             f"""
         {Fore.GREEN + Style.BRIGHT}Rey? {Fore.YELLOW + Style.BRIGHT}<INI WATERMARK>
@@ -50,7 +54,7 @@ class Dawn:
         return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
     
     def load_accounts(self):
-        filename = "tokens.json"
+        filename = "accounts.json"
         try:
             if not os.path.exists(filename):
                 self.log(f"{Fore.RED}File {filename} Not Found.{Style.RESET_ALL}")
@@ -63,6 +67,37 @@ class Dawn:
                 return []
         except json.JSONDecodeError:
             return []
+        
+    def save_tokens(self, new_accounts):
+        filename = "tokens.json"
+        try:
+            if os.path.exists(filename) and os.path.getsize(filename) > 0:
+                with open(filename, 'r') as file:
+                    existing_accounts = json.load(file)
+            else:
+                existing_accounts = []
+
+            account_dict = {acc["Email"]: acc for acc in existing_accounts}
+
+            for new_acc in new_accounts:
+                account_dict[new_acc["Email"]] = new_acc
+
+            updated_accounts = list(account_dict.values())
+
+            with open(filename, 'w') as file:
+                json.dump(updated_accounts, file, indent=4)
+
+        except Exception as e:
+            return []
+        
+    def load_2captcha_key(self):
+        try:
+            with open("2captcha_key.txt", 'r') as file:
+                captcha_key = file.read().strip()
+
+            return captcha_key
+        except Exception as e:
+            return None
     
     async def load_proxies(self, use_proxy_choice: int):
         filename = "proxy.txt"
@@ -122,13 +157,22 @@ class Dawn:
         app_id = prefix + uuid.uuid4().hex[len(prefix):]
         return app_id
     
-    def generate_keepalive_payload(self, email: str):
+    def generate_login_payload(self, email: str):
         try:
+            current_time = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace("+00:00", "Z")
+
             payload = {
                 "username":email,
-                "extensionid":"fpdkjdnhkakefebpekbdhillbhonfjjp",
-                "numberoftabs":0,
-                "_v":"1.1.8"
+                "password":self.password[email],
+                "logindata":{
+                    "_v":{
+                        "version":"1.1.8"
+                    },
+                    "datetime":current_time
+                },
+                "puzzle_id":self.puzzle_id[email],
+                "ans":self.answer[email],
+                "appid":self.app_id[email]
             }
 
             return payload
@@ -140,19 +184,6 @@ class Dawn:
             local, domain = account.split('@', 1)
             mask_account = local[:3] + '*' * 3 + local[-3:]
             return f"{mask_account}@{domain}"
-    
-    def print_message(self, email, proxy, color, message):
-        self.log(
-            f"{Fore.CYAN + Style.BRIGHT}[ Account:{Style.RESET_ALL}"
-            f"{Fore.WHITE + Style.BRIGHT} {self.mask_account(email)} {Style.RESET_ALL}"
-            f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
-            f"{Fore.CYAN + Style.BRIGHT} Proxy: {Style.RESET_ALL}"
-            f"{Fore.WHITE + Style.BRIGHT}{proxy}{Style.RESET_ALL}"
-            f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
-            f"{Fore.CYAN + Style.BRIGHT}Status:{Style.RESET_ALL}"
-            f"{color + Style.BRIGHT} {message} {Style.RESET_ALL}"
-            f"{Fore.CYAN + Style.BRIGHT}]{Style.RESET_ALL}"
-        )
 
     def print_question(self):
         while True:
@@ -186,66 +217,176 @@ class Dawn:
                     print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter 'y' or 'n'.{Style.RESET_ALL}")
 
         return choose, rotate
+    
+    async def solve_recaptcha(self, email: str, proxy=None, retries=5):
+        for attempt in range(retries):
+            try:
+                if self.CAPTCHA_KEY is None:
+                    return None
+                
+                response = await asyncio.to_thread(requests.post, "https://2captcha.com/in.php", data={
+                    'key': self.CAPTCHA_KEY,
+                    'method': 'base64',
+                    'body': self.puzzle_image[email],
+                    'json': 1
+                }, proxy=proxy)
 
-    async def check_connection(self, email: str, proxy=None):
+                response.raise_for_status()
+                result = response.json()
+
+                if result.get("status") != 1:
+                    await asyncio.sleep(5)
+                    continue
+
+                request_id = result.get("request")
+                self.log(
+                    f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
+                    f"{Fore.CYAN+Style.BRIGHT} Req Id: {Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT}{request_id}{Style.RESET_ALL}"
+                )
+
+                for _ in range(30):
+                    res_response = await asyncio.to_thread(requests.get, "https://2captcha.com/res.php", params={
+                        'key': self.CAPTCHA_KEY,
+                        'action': 'get',
+                        'id': request_id,
+                        'json': 1
+                    }, proxy=proxy)
+
+                    res_response.raise_for_status()
+                    res_result = res_response.json()
+
+                    if res_result.get("status") == 1:
+                        self.answer[email] = res_result["request"]
+
+                        self.log(
+                            f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
+                            f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
+                            f"{Fore.GREEN+Style.BRIGHT}Puzzle Images Solved Successfully{Style.RESET_ALL}"
+                        )
+                        self.log(
+                            f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
+                            f"{Fore.CYAN+Style.BRIGHT} Answer: {Style.RESET_ALL}"
+                            f"{Fore.WHITE+Style.BRIGHT}{self.answer[email]}{Style.RESET_ALL}"
+                        )
+                        return True
+                    elif res_result.get("request") == "CAPCHA_NOT_READY":
+                        self.log(
+                            f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
+                            f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
+                            f"{Fore.YELLOW+Style.BRIGHT}Captcha Not Ready{Style.RESET_ALL}"
+                        )
+                        await asyncio.sleep(5)
+                        continue
+                    else:
+                        break
+
+            except Exception as e:
+                if attempt < retries - 1:
+                    await asyncio.sleep(5)
+                    continue
+                return None
+
+    async def check_connection(self, proxy=None):
         try:
             response = await asyncio.to_thread(requests.get, url=self.BASE_API, headers={}, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            self.print_message(email, proxy, Fore.RED, f"Connection Not 200 OK: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}Error    :{Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} Connection Not 200 OK {Style.RESET_ALL}"
+                f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+            )
 
         return None
 
-    async def user_data(self, email: str, proxy=None, retries=5):
-        url = f"{self.BASE_API}/api/atom/v1/userreferral/getpoint?appid={self.app_id[email]}"
-        headers = {
-            **self.headers,
-            "Authorization": f"Berear {self.tokens[email]}",
-            "Content-Type": "application/json"
-        }
+    async def get_puzzle_id(self, email: str, proxy=None, retries=5):
+        url = f"{self.BASE_API}/chromeapi/dawn/v1/puzzle/get-puzzle?appid={self.app_id[email]}"
         for attempt in range(retries):
             try:
-                response = await asyncio.to_thread(requests.get, url=url, headers=headers, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
+                response = await asyncio.to_thread(requests.get, url=url, headers=self.headers, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                self.print_message(email, proxy, Fore.RED, f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Error    :{Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT} GET Puzzle Id Failed {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                )
 
         return None
 
-    async def send_keepalive(self, email: str, proxy=None, retries=5):
-        url = f"{self.BASE_API}/chromeapi/dawn/v1/userreward/keepalive?appid={self.app_id[email]}"
-        data = json.dumps(self.generate_keepalive_payload(email))
+    async def get_puzzle_image(self, email: str, proxy=None, retries=5):
+        url = f"{self.BASE_API}/chromeapi/dawn/v1/puzzle/get-puzzle-image?puzzle_id={self.puzzle_id[email]}&appid={self.app_id[email]}"
+        for attempt in range(retries):
+            try:
+                response = await asyncio.to_thread(requests.get, url=url, headers=self.headers, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
+                if attempt < retries - 1:
+                    await asyncio.sleep(5)
+                    continue
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Error    :{Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT} GET Puzzle Image Failed {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                )
+
+        return None
+
+    async def user_login(self, email: str, use_proxy: bool, proxy=None, retries=5):
+        url = f"{self.BASE_API}/chromeapi/dawn/v1/user/login/v2?appid={self.app_id[email]}"
+        data = json.dumps(self.generate_login_payload(email))
         headers = {
             **self.headers,
-            "Authorization": f"Berear {self.tokens[email]}",
             "Content-Length": str(len(data)),
             "Content-Type": "application/json"
         }
         for attempt in range(retries):
             try:
                 response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
+                if response.status_code == 400:
+                    self.log(
+                        f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
+                        f"{Fore.RED+Style.BRIGHT}Incorrect Answer{Style.RESET_ALL}"
+                    )
+                    await self.process_solve_recaptcha(email, use_proxy)
+                    data = json.dumps(self.generate_login_payload(email))
+                    continue
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Error    :{Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT} Login Failed {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                )
 
         return None
             
     async def process_check_connection(self, email: str, use_proxy: bool, rotate_proxy: bool):
         while True:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}Proxy    :{Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {proxy} {Style.RESET_ALL}"
+            )
 
-            is_valid = await self.check_connection(email, proxy)
+            is_valid = await self.check_connection(proxy)
             if is_valid and is_valid.get("message") == "ok":
-                self.print_message(email, proxy, Fore.GREEN, "Connection 200 OK")
                 return True
             
             if rotate_proxy:
@@ -253,65 +394,53 @@ class Dawn:
 
             await asyncio.sleep(5)
             continue
-            
-    async def process_user_earning(self, email: str, use_proxy: bool):
-        while True:
-            proxy = self.get_next_proxy_for_account(email) if use_proxy else None
-
-            user = await self.user_data(email, proxy)
-            if isinstance(user, dict) and user.get("message") == "success":
-                referral_point = user.get("data", {}).get("referralPoint", {}).get("commission", 0)
-                reward_point = user.get("data", {}).get("rewardPoint", {})
-
-                reward_points = sum(
-                    value for key, value in reward_point.items() if "points" in key.lower() and isinstance(value, (int, float))
-                )
-
-                total_points = referral_point + reward_points
-                
-                self.print_message(email, proxy, Fore.WHITE, f"Earning {total_points:.0f} PTS")
-
-            await asyncio.sleep(10 * 60) 
-
-    async def process_send_keepalive(self, email: str, use_proxy: bool):
-        while True:
-            proxy = self.get_next_proxy_for_account(email) if use_proxy else None
-
-            print(
-                f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
-                f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-                f"{Fore.BLUE + Style.BRIGHT}Try to Sent Ping...{Style.RESET_ALL}                                    ",
-                end="\r",
-                flush=True
-            )
-
-            keepalive = await self.send_keepalive(email, proxy)
-            if isinstance(keepalive, dict) and keepalive.get("message") == "ping recored":
-                server_name = keepalive.get("s") or "N/A"
-
-                self.print_message(email, proxy, Fore.GREEN, "PING Success "
-                    f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
-                    f"{Fore.CYAN + Style.BRIGHT} Server Name: {Style.RESET_ALL}"
-                    f"{Fore.WHITE + Style.BRIGHT}{server_name}{Style.RESET_ALL}"
-                )
-
-            print(
-                f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
-                f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-                f"{Fore.BLUE + Style.BRIGHT}Wait For 10 Minutes For Next Ping...{Style.RESET_ALL}",
-                end="\r",
-                flush=True
-            )
-            await asyncio.sleep(10 * 60)
         
+    async def process_solve_recaptcha(self, email: str, use_proxy: bool):
+        proxy = self.get_next_proxy_for_account(email) if use_proxy else None
+
+        get_puzzle = await self.get_puzzle_id(email, proxy)
+        if isinstance(get_puzzle, dict) and get_puzzle.get("success"):
+            self.puzzle_id[email] = get_puzzle["puzzle_id"]
+
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}Puzzle Id:{Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {self.puzzle_id[email]} {Style.RESET_ALL}"
+            )
+
+            get_image = await self.get_puzzle_image(email, proxy)
+            if isinstance(get_image, dict) and get_image.get("success"):
+                self.puzzle_image[email] = get_image["imgBase64"]
+
+                self.log(f"{Fore.CYAN+Style.BRIGHT}Captcha  :{Style.RESET_ALL}")
+
+                solved = await self.solve_recaptcha(email, proxy)
+                if solved:
+                    return True
+                
+                self.log(
+                    f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
+                    f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT}Puzzle Images Not Solved{Style.RESET_ALL}"
+                )
+                return False
+
     async def process_accounts(self, email: str, use_proxy: bool, rotate_proxy: bool):
         is_valid = await self.process_check_connection(email, use_proxy, rotate_proxy)
         if is_valid:
-            tasks = [
-                asyncio.create_task(self.process_user_earning(email, use_proxy)),
-                asyncio.create_task(self.process_send_keepalive(email, use_proxy))
-            ]
-            await asyncio.gather(*tasks)
+            proxy = self.get_next_proxy_for_account(email) if use_proxy else None
+
+            is_solved = await self.process_solve_recaptcha(email, use_proxy)
+            if is_solved:         
+                login = await self.user_login(email, use_proxy, proxy)
+                if isinstance(login, dict) and login.get("status"):
+                    token = login["data"]["token"]
+
+                    self.save_tokens([{"Email":email, "Token":token}])
+
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}Status   :{Style.RESET_ALL}"
+                        f"{Fore.GREEN+Style.BRIGHT} Token Have Been Saved Successfully {Style.RESET_ALL}"
+                    )
     
     async def main(self):
         try:
@@ -319,6 +448,10 @@ class Dawn:
             if not accounts:
                 self.log(f"{Fore.RED + Style.BRIGHT}No Accounts Loaded.{Style.RESET_ALL}")
                 return
+            
+            captcha_key = self.load_2captcha_key()
+            if captcha_key:
+                self.CAPTCHA_KEY = captcha_key
             
             use_proxy_choice, rotate_proxy = self.print_question()
 
@@ -336,31 +469,37 @@ class Dawn:
             if use_proxy:
                 await self.load_proxies(use_proxy_choice)
 
-            self.log(f"{Fore.CYAN + Style.BRIGHT}={Style.RESET_ALL}"*75)
-
-            tasks = []
+            separator = "=" * 27
             for idx, account in enumerate(accounts, start=1):
                 if account:
-                    email = account["Email"]
-                    token = account["Token"]
+                    self.log(
+                        f"{Fore.CYAN + Style.BRIGHT}{separator}[{Style.RESET_ALL}"
+                        f"{Fore.WHITE + Style.BRIGHT} {idx} {Style.RESET_ALL}"
+                        f"{Fore.CYAN + Style.BRIGHT}Of{Style.RESET_ALL}"
+                        f"{Fore.WHITE + Style.BRIGHT} {len(accounts)} {Style.RESET_ALL}"
+                        f"{Fore.CYAN + Style.BRIGHT}]{separator}{Style.RESET_ALL}"
+                    )
 
-                    if not "@" in email or not token:
+                    email = account["Email"]
+                    password = account["Password"]
+
+                    if not "@" in email or not password:
                         self.log(
-                            f"{Fore.CYAN + Style.BRIGHT}[ Account: {Style.RESET_ALL}"
-                            f"{Fore.WHITE + Style.BRIGHT}{idx}{Style.RESET_ALL}"
-                            f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
-                            f"{Fore.CYAN + Style.BRIGHT}Status:{Style.RESET_ALL}"
-                            f"{Fore.RED + Style.BRIGHT} Invalid Account Data {Style.RESET_ALL}"
-                            f"{Fore.CYAN + Style.BRIGHT}]{Style.RESET_ALL}"
+                            f"{Fore.CYAN+Style.BRIGHT}Status   :{Style.RESET_ALL}"
+                            f"{Fore.RED+Style.BRIGHT} Invalid Account Data {Style.RESET_ALL}"
                         )
                         continue
 
-                    self.tokens[email] = token
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}Email    :{Style.RESET_ALL}"
+                        f"{Fore.WHITE+Style.BRIGHT} {self.mask_account(email)} {Style.RESET_ALL}"
+                    )
+
+                    self.password[email] = password
                     self.app_id[email] = self.generate_app_id()
 
-                    tasks.append(asyncio.create_task(self.process_accounts(email, use_proxy, rotate_proxy)))
-
-            await asyncio.gather(*tasks)
+                    await self.process_accounts(email, use_proxy, rotate_proxy)
+                    await asyncio.sleep(3)
 
         except Exception as e:
             self.log(f"{Fore.RED+Style.BRIGHT}Error: {e}{Style.RESET_ALL}")
