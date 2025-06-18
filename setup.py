@@ -342,7 +342,7 @@ class Dawn:
 
         return None
 
-    async def user_login(self, email: str, proxy=None, retries=5):
+    async def user_login(self, email: str, use_proxy: bool, proxy=None, retries=5):
         url = f"{self.BASE_API}/chromeapi/dawn/v1/user/login/v2?appid={self.app_id[email]}"
         data = json.dumps(self.generate_login_payload(email))
         headers = {
@@ -353,6 +353,15 @@ class Dawn:
         for attempt in range(retries):
             try:
                 response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
+                if response.status_code == 400:
+                    self.log(
+                        f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
+                        f"{Fore.RED+Style.BRIGHT}Incorrect Answer{Style.RESET_ALL}"
+                    )
+                    await self.process_solve_recaptcha(email, use_proxy)
+                    data = json.dumps(self.generate_login_payload(email))
+                    continue
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
@@ -386,45 +395,52 @@ class Dawn:
             await asyncio.sleep(5)
             continue
         
+    async def process_solve_recaptcha(self, email: str, use_proxy: bool):
+        proxy = self.get_next_proxy_for_account(email) if use_proxy else None
+
+        get_puzzle = await self.get_puzzle_id(email, proxy)
+        if isinstance(get_puzzle, dict) and get_puzzle.get("success"):
+            self.puzzle_id[email] = get_puzzle["puzzle_id"]
+
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}Puzzle Id:{Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {self.puzzle_id[email]} {Style.RESET_ALL}"
+            )
+
+            get_image = await self.get_puzzle_image(email, proxy)
+            if isinstance(get_image, dict) and get_image.get("success"):
+                self.puzzle_image[email] = get_image["imgBase64"]
+
+                self.log(f"{Fore.CYAN+Style.BRIGHT}Captcha  :{Style.RESET_ALL}")
+
+                solved = await self.solve_recaptcha(email, proxy)
+                if solved:
+                    return True
+                
+                self.log(
+                    f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
+                    f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT}Puzzle Images Not Solved{Style.RESET_ALL}"
+                )
+                return False
+
     async def process_accounts(self, email: str, use_proxy: bool, rotate_proxy: bool):
         is_valid = await self.process_check_connection(email, use_proxy, rotate_proxy)
         if is_valid:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
 
-            get_puzzle = await self.get_puzzle_id(email, proxy)
-            if isinstance(get_puzzle, dict) and get_puzzle.get("success"):
-                self.puzzle_id[email] = get_puzzle["puzzle_id"]
+            is_solved = await self.process_solve_recaptcha(email, use_proxy)
+            if is_solved:         
+                login = await self.user_login(email, use_proxy, proxy)
+                if isinstance(login, dict) and login.get("status"):
+                    token = login["data"]["token"]
 
-                self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}Puzzle Id:{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {self.puzzle_id[email]} {Style.RESET_ALL}"
-                )
+                    self.save_tokens([{"Email":email, "Token":token}])
 
-                get_image = await self.get_puzzle_image(email, proxy)
-                if isinstance(get_image, dict) and get_image.get("success"):
-                    self.puzzle_image[email] = get_image["imgBase64"]
-
-                    self.log(f"{Fore.CYAN+Style.BRIGHT}Captcha  :{Style.RESET_ALL}")
-
-                    solved = await self.solve_recaptcha(email, proxy)
-                    if not solved:
-                        self.log(
-                            f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
-                            f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
-                            f"{Fore.RED+Style.BRIGHT}Puzzle Images Not Solved{Style.RESET_ALL}"
-                        )
-                        return
-                    
-                    login = await self.user_login(email, proxy)
-                    if isinstance(login, dict) and login.get("status"):
-                        token = login["data"]["token"]
-
-                        self.save_tokens([{"Email":email, "Token":token}])
-
-                        self.log(
-                            f"{Fore.CYAN+Style.BRIGHT}Status   :{Style.RESET_ALL}"
-                            f"{Fore.GREEN+Style.BRIGHT} Token Have Been Saved Successfully {Style.RESET_ALL}"
-                        )
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}Status   :{Style.RESET_ALL}"
+                        f"{Fore.GREEN+Style.BRIGHT} Token Have Been Saved Successfully {Style.RESET_ALL}"
+                    )
     
     async def main(self):
         try:
