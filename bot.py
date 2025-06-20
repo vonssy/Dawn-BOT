@@ -189,7 +189,7 @@ class Dawn:
 
     async def check_connection(self, email: str, proxy=None):
         try:
-            response = await asyncio.to_thread(requests.get, url=self.BASE_API, headers={}, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
+            response = await asyncio.to_thread(requests.get, url="http://ip-api.com/json", proxy=proxy, timeout=30)
             response.raise_for_status()
             return response.json()
         except Exception as e:
@@ -244,8 +244,7 @@ class Dawn:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
 
             is_valid = await self.check_connection(email, proxy)
-            if is_valid and is_valid.get("message") == "ok":
-                self.print_message(email, proxy, Fore.GREEN, "Connection 200 OK")
+            if is_valid and is_valid.get("status") == "success":
                 return True
             
             if rotate_proxy:
@@ -259,7 +258,7 @@ class Dawn:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
 
             user = await self.user_data(email, proxy)
-            if isinstance(user, dict) and user.get("message") == "success":
+            if isinstance(user, dict) and user.get("message") == "getpoint fetched successfully":
                 referral_point = user.get("data", {}).get("referralPoint", {}).get("commission", 0)
                 reward_point = user.get("data", {}).get("rewardPoint", {})
 
