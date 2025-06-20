@@ -352,17 +352,32 @@ class Dawn:
         for attempt in range(retries):
             try:
                 response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
+                if response.status_code == 400:
+                    msg = response.json().get("message", "Unknown error (400)")
+                    raise Exception(f"HTTP 400 Bad Request: {msg}")
+
                 response.raise_for_status()
                 return response.json()
+
             except Exception as e:
+                if isinstance(e, Exception) and 'HTTP 400 Bad Request' in str(e):
+                    self.log(
+                        f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
+                        f"{Fore.RED+Style.BRIGHT}Login Failed{Style.RESET_ALL}"
+                        f"{Fore.MAGENTA+Style.BRIGHT} - {Style.RESET_ALL}"
+                        f"{Fore.YELLOW+Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
+                    )
+                    return None
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}Error    :{Style.RESET_ALL}"
-                    f"{Fore.RED+Style.BRIGHT} Login Failed {Style.RESET_ALL}"
-                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
-                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
+                    f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT}Login Failed{Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT} - {Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
                 )
 
         return None
@@ -407,24 +422,25 @@ class Dawn:
                         self.log(f"{Fore.CYAN+Style.BRIGHT}Captcha  :{Style.RESET_ALL}")
 
                         answer = await self.solve_recaptcha(puzzle_image, proxy)
-                        if answer:
-                            login = await self.user_login(email, puzzle_id, answer, proxy)
-                            if isinstance(login, dict) and login.get("status"):
-                                token = login["data"]["token"]
+                        if not answer:
+                            self.log(
+                                f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
+                                f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
+                                f"{Fore.RED+Style.BRIGHT}Puzzle Images Not Solved{Style.RESET_ALL}"
+                            )
+                            continue
 
-                                self.save_tokens([{"Email":email, "Token":token}])
+                        login = await self.user_login(email, puzzle_id, answer, proxy)
+                        if isinstance(login, dict) and login.get("status"):
+                            token = login["data"]["token"]
 
-                                self.log(
-                                    f"{Fore.CYAN+Style.BRIGHT}Status   :{Style.RESET_ALL}"
-                                    f"{Fore.GREEN+Style.BRIGHT} Token Have Been Saved Successfully {Style.RESET_ALL}"
-                                )
-                                break
-                        
-                        self.log(
-                            f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
-                            f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
-                            f"{Fore.RED+Style.BRIGHT}Puzzle Images Not Solved{Style.RESET_ALL}"
-                        )
+                            self.save_tokens([{"Email":email, "Token":token}])
+
+                            self.log(
+                                f"{Fore.CYAN+Style.BRIGHT}Status   :{Style.RESET_ALL}"
+                                f"{Fore.GREEN+Style.BRIGHT} Token Have Been Saved Successfully {Style.RESET_ALL}"
+                            )
+                            break
                     
                 await asyncio.sleep(5)
     
