@@ -431,7 +431,7 @@ class Dawn:
                             continue
 
                         login = await self.user_login(email, puzzle_id, answer, proxy)
-                        if isinstance(login, dict) and login.get("status"):
+                        if isinstance(login, dict) and login.get("success"):
                             token = login["data"]["token"]
 
                             self.save_tokens([{"Email":email, "Token":token}])
