@@ -18,6 +18,7 @@ class Dawn:
             "User-Agent": FakeUserAgent().random
         }
         self.BASE_API = "https://ext-api.dawninternet.com"
+        self.EXTENSION_ID = "fpdkjdnhkakefebpekbdhillbhonfjjp"
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
@@ -126,9 +127,9 @@ class Dawn:
         try:
             payload = {
                 "username":email,
-                "extensionid":"fpdkjdnhkakefebpekbdhillbhonfjjp",
+                "extensionid":self.EXTENSION_ID,
                 "numberoftabs":0,
-                "_v":"1.1.8"
+                "_v":"1.1.9"
             }
 
             return payload
@@ -258,8 +259,8 @@ class Dawn:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
 
             user = await self.user_data(email, proxy)
-            if isinstance(user, dict) and user.get("message") == "getpoint fetched successfully":
-                referral_point = user.get("data", {}).get("referralPoint", {}).get("commission", 0)
+            if isinstance(user, dict) and user.get("success"):
+                referral_point = user.get("data", {}).get("referralPoint", {}).get("commission", 0) 
                 reward_point = user.get("data", {}).get("rewardPoint", {})
 
                 reward_points = sum(
@@ -270,7 +271,7 @@ class Dawn:
                 
                 self.print_message(email, proxy, Fore.WHITE, f"Earning {total_points:.0f} PTS")
 
-            await asyncio.sleep(10 * 60) 
+            await asyncio.sleep(5 * 60) 
 
     async def process_send_keepalive(self, email: str, use_proxy: bool):
         while True:
@@ -285,7 +286,7 @@ class Dawn:
             )
 
             keepalive = await self.send_keepalive(email, proxy)
-            if isinstance(keepalive, dict) and keepalive.get("message") == "ping recored":
+            if isinstance(keepalive, dict) and keepalive.get("success"):
                 server_name = keepalive.get("s") or "N/A"
 
                 self.print_message(email, proxy, Fore.GREEN, "PING Success "

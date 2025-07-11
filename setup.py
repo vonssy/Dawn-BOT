@@ -164,9 +164,7 @@ class Dawn:
                 "username":email,
                 "password":self.password[email],
                 "logindata":{
-                    "_v":{
-                        "version":"1.1.8"
-                    },
+                    "_v":{ "version":"1.1.9" },
                     "datetime":current_time
                 },
                 "puzzle_id":puzzle_id,
@@ -358,7 +356,6 @@ class Dawn:
 
                 response.raise_for_status()
                 return response.json()
-
             except Exception as e:
                 if isinstance(e, Exception) and 'HTTP 400 Bad Request' in str(e):
                     self.log(
