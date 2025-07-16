@@ -8,17 +8,9 @@ wib = pytz.timezone('Asia/Jakarta')
 
 class Dawn:
     def __init__(self) -> None:
-        self.headers = {
-            "Accept": "*/*",
-            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Origin": "chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "cross-site",
-            "User-Agent": FakeUserAgent().random
-        }
         self.BASE_API = "https://ext-api.dawninternet.com"
         self.EXTENSION_ID = "fpdkjdnhkakefebpekbdhillbhonfjjp"
+        self.HEADERS = {}
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
@@ -38,7 +30,7 @@ class Dawn:
     def welcome(self):
         print(
             f"""
-        {Fore.GREEN + Style.BRIGHT}Auto Ping {Fore.BLUE + Style.BRIGHT}Dawn - BOT
+        {Fore.GREEN + Style.BRIGHT}Dawn {Fore.BLUE + Style.BRIGHT}Auto BOT
             """
             f"""
         {Fore.GREEN + Style.BRIGHT}Rey? {Fore.YELLOW + Style.BRIGHT}<INI WATERMARK>
@@ -69,7 +61,7 @@ class Dawn:
         filename = "proxy.txt"
         try:
             if use_proxy_choice == 1:
-                response = await asyncio.to_thread(requests.get, "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text")
+                response = await asyncio.to_thread(requests.get, "https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/all.txt")
                 response.raise_for_status()
                 content = response.text
                 with open(filename, 'w') as f:
@@ -101,20 +93,20 @@ class Dawn:
             return proxies
         return f"http://{proxies}"
 
-    def get_next_proxy_for_account(self, email):
-        if email not in self.account_proxies:
+    def get_next_proxy_for_account(self, account):
+        if account not in self.account_proxies:
             if not self.proxies:
                 return None
             proxy = self.check_proxy_schemes(self.proxies[self.proxy_index])
-            self.account_proxies[email] = proxy
+            self.account_proxies[account] = proxy
             self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
-        return self.account_proxies[email]
+        return self.account_proxies[account]
 
-    def rotate_proxy_for_account(self, email):
+    def rotate_proxy_for_account(self, account):
         if not self.proxies:
             return None
         proxy = self.check_proxy_schemes(self.proxies[self.proxy_index])
-        self.account_proxies[email] = proxy
+        self.account_proxies[account] = proxy
         self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
         return proxy
             
@@ -189,25 +181,25 @@ class Dawn:
         return choose, rotate
 
     async def check_connection(self, email: str, proxy=None):
+        url = "https://api.ipify.org?format=json"
+        proxies = {"http":proxy, "https":proxy} if proxy else None
         try:
-            response = await asyncio.to_thread(requests.get, url="http://ip-api.com/json", proxy=proxy, timeout=30)
+            response = await asyncio.to_thread(requests.get, url=url, proxies=proxies, timeout=30, impersonate="chrome110", verify=False)
             response.raise_for_status()
-            return response.json()
+            return True
         except Exception as e:
             self.print_message(email, proxy, Fore.RED, f"Connection Not 200 OK: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
-
-        return None
+            return None
 
     async def user_data(self, email: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/api/atom/v1/userreferral/getpoint?appid={self.app_id[email]}"
-        headers = {
-            **self.headers,
-            "Authorization": f"Berear {self.tokens[email]}",
-            "Content-Type": "application/json"
-        }
+        headers = self.HEADERS[email].copy()
+        headers["Authorization"] = f"Berear {self.tokens[email]}"
+        headers["Content-Type"] = "application/json"
         for attempt in range(retries):
+            proxies = {"http":proxy, "https":proxy} if proxy else None
             try:
-                response = await asyncio.to_thread(requests.get, url=url, headers=headers, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
+                response = await asyncio.to_thread(requests.get, url=url, headers=headers, proxies=proxies, timeout=60, impersonate="chrome110", verify=False)
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
@@ -221,15 +213,14 @@ class Dawn:
     async def send_keepalive(self, email: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/chromeapi/dawn/v1/userreward/keepalive?appid={self.app_id[email]}"
         data = json.dumps(self.generate_keepalive_payload(email))
-        headers = {
-            **self.headers,
-            "Authorization": f"Berear {self.tokens[email]}",
-            "Content-Length": str(len(data)),
-            "Content-Type": "application/json"
-        }
+        headers = self.HEADERS[email].copy()
+        headers["Authorization"] = f"Berear {self.tokens[email]}"
+        headers["Content-Length"] = str(len(data))
+        headers["Content-Type"] = "application/json"
         for attempt in range(retries):
+            proxies = {"http":proxy, "https":proxy} if proxy else None
             try:
-                response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
+                response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxies=proxies, timeout=60, impersonate="chrome110", verify=False)
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
@@ -245,14 +236,11 @@ class Dawn:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
 
             is_valid = await self.check_connection(email, proxy)
-            if is_valid and is_valid.get("status") == "success":
+            if is_valid:
                 return True
             
             if rotate_proxy:
                 proxy = self.rotate_proxy_for_account(email)
-
-            await asyncio.sleep(5)
-            continue
             
     async def process_user_earning(self, email: str, use_proxy: bool):
         while True:
@@ -354,6 +342,16 @@ class Dawn:
                             f"{Fore.CYAN + Style.BRIGHT}]{Style.RESET_ALL}"
                         )
                         continue
+
+                    self.HEADERS[email] = {
+                        "Accept": "*/*",
+                        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+                        "Origin": "chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp",
+                        "Sec-Fetch-Dest": "empty",
+                        "Sec-Fetch-Mode": "cors",
+                        "Sec-Fetch-Site": "cross-site",
+                        "User-Agent": FakeUserAgent().random
+                    }
 
                     self.tokens[email] = token
                     self.app_id[email] = self.generate_app_id()

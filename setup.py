@@ -8,24 +8,14 @@ wib = pytz.timezone('Asia/Jakarta')
 
 class Dawn:
     def __init__(self) -> None:
-        self.headers = {
-            "Accept": "*/*",
-            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Origin": "chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "cross-site",
-            "User-Agent": FakeUserAgent().random
-        }
         self.BASE_API = "https://ext-api.dawninternet.com"
         self.CAPTCHA_KEY = None
+        self.HEADERS = {}
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
         self.password = {}
         self.app_id = {}
-        self.puzzle_id = {}
-        self.puzzle_image = {}
 
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -40,7 +30,7 @@ class Dawn:
     def welcome(self):
         print(
             f"""
-        {Fore.GREEN + Style.BRIGHT}Auto Setup {Fore.BLUE + Style.BRIGHT}Dawn - BOT
+        {Fore.GREEN + Style.BRIGHT}Dawn {Fore.BLUE + Style.BRIGHT}Auto BOT
             """
             f"""
         {Fore.GREEN + Style.BRIGHT}Rey? {Fore.YELLOW + Style.BRIGHT}<INI WATERMARK>
@@ -102,7 +92,7 @@ class Dawn:
         filename = "proxy.txt"
         try:
             if use_proxy_choice == 1:
-                response = await asyncio.to_thread(requests.get, "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text")
+                response = await asyncio.to_thread(requests.get, "https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/all.txt")
                 response.raise_for_status()
                 content = response.text
                 with open(filename, 'w') as f:
@@ -134,20 +124,20 @@ class Dawn:
             return proxies
         return f"http://{proxies}"
 
-    def get_next_proxy_for_account(self, email):
-        if email not in self.account_proxies:
+    def get_next_proxy_for_account(self, account):
+        if account not in self.account_proxies:
             if not self.proxies:
                 return None
             proxy = self.check_proxy_schemes(self.proxies[self.proxy_index])
-            self.account_proxies[email] = proxy
+            self.account_proxies[account] = proxy
             self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
-        return self.account_proxies[email]
+        return self.account_proxies[account]
 
-    def rotate_proxy_for_account(self, email):
+    def rotate_proxy_for_account(self, account):
         if not self.proxies:
             return None
         proxy = self.check_proxy_schemes(self.proxies[self.proxy_index])
-        self.account_proxies[email] = proxy
+        self.account_proxies[account] = proxy
         self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
         return proxy
             
@@ -215,18 +205,35 @@ class Dawn:
 
         return choose, rotate
     
+    async def check_connection(self, proxy=None):
+        url = "https://api.ipify.org?format=json"
+        proxies = {"http":proxy, "https":proxy} if proxy else None
+        try:
+            response = await asyncio.to_thread(requests.get, url=url, proxies=proxies, timeout=30, impersonate="chrome110", verify=False)
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            self.log(
+                f"{Fore.CYAN + Style.BRIGHT}Status :{Style.RESET_ALL}"
+                f"{Fore.RED + Style.BRIGHT} Connection Not 200 OK {Style.RESET_ALL}"
+                f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
+                f"{Fore.YELLOW + Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+            )
+            return None
+    
     async def solve_recaptcha(self, puzzle_image: str, proxy=None, retries=5):
         for attempt in range(retries):
+            proxies = {"http":proxy, "https":proxy} if proxy else None
             try:
                 if self.CAPTCHA_KEY is None:
                     return None
                 
-                response = await asyncio.to_thread(requests.post, "https://2captcha.com/in.php", data={
-                    'key': self.CAPTCHA_KEY,
-                    'method': 'base64',
-                    'body': puzzle_image,
-                    'json': 1
-                }, proxy=proxy)
+                response = await asyncio.to_thread(requests.post, "https://2captcha.com/in.php", json={
+                    "key": self.CAPTCHA_KEY,
+                    "method": "base64",
+                    "body": puzzle_image,
+                    "json": 1
+                }, proxies=proxies, impersonate="chrome110", verify=False)
 
                 response.raise_for_status()
                 result = response.json()
@@ -237,18 +244,18 @@ class Dawn:
 
                 request_id = result.get("request")
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
-                    f"{Fore.CYAN+Style.BRIGHT} Req Id: {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                    f"{Fore.CYAN+Style.BRIGHT} Req Id  : {Style.RESET_ALL}"
                     f"{Fore.WHITE+Style.BRIGHT}{request_id}{Style.RESET_ALL}"
                 )
 
                 for _ in range(30):
                     res_response = await asyncio.to_thread(requests.get, "https://2captcha.com/res.php", params={
-                        'key': self.CAPTCHA_KEY,
-                        'action': 'get',
-                        'id': request_id,
-                        'json': 1
-                    }, proxy=proxy)
+                        "key": self.CAPTCHA_KEY,
+                        "action": "get",
+                        "id": request_id,
+                        "json": 1
+                    }, proxies=proxies, impersonate="chrome110", verify=False)
 
                     res_response.raise_for_status()
                     res_result = res_response.json()
@@ -257,20 +264,20 @@ class Dawn:
                         answer = res_result["request"]
 
                         self.log(
-                            f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
-                            f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
-                            f"{Fore.GREEN+Style.BRIGHT}Puzzle Images Solved Successfully{Style.RESET_ALL}"
+                            f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                            f"{Fore.CYAN+Style.BRIGHT} Status  : {Style.RESET_ALL}"
+                            f"{Fore.GREEN+Style.BRIGHT}Image to Text Captcha Solved Successfully{Style.RESET_ALL}"
                         )
                         self.log(
-                            f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
-                            f"{Fore.CYAN+Style.BRIGHT} Answer: {Style.RESET_ALL}"
+                            f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                            f"{Fore.CYAN+Style.BRIGHT} Answer  : {Style.RESET_ALL}"
                             f"{Fore.WHITE+Style.BRIGHT}{answer}{Style.RESET_ALL}"
                         )
                         return answer
                     elif res_result.get("request") == "CAPCHA_NOT_READY":
                         self.log(
-                            f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
-                            f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
+                            f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                            f"{Fore.CYAN+Style.BRIGHT} Message : {Style.RESET_ALL}"
                             f"{Fore.YELLOW+Style.BRIGHT}Captcha Not Ready{Style.RESET_ALL}"
                         )
                         await asyncio.sleep(5)
@@ -284,26 +291,13 @@ class Dawn:
                     continue
                 return None
 
-    async def check_connection(self, proxy=None):
-        try:
-            response = await asyncio.to_thread(requests.get, url="http://ip-api.com/json", proxy=proxy, timeout=30)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Error    :{Style.RESET_ALL}"
-                f"{Fore.RED+Style.BRIGHT} Connection Not 200 OK {Style.RESET_ALL}"
-                f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
-                f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
-            )
-
-        return None
-
     async def get_puzzle_id(self, email: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/chromeapi/dawn/v1/puzzle/get-puzzle?appid={self.app_id[email]}"
+        headers = self.HEADERS[email].copy()
         for attempt in range(retries):
+            proxies = {"http":proxy, "https":proxy} if proxy else None
             try:
-                response = await asyncio.to_thread(requests.get, url=url, headers=self.headers, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
+                response = await asyncio.to_thread(requests.get, url=url, headers=headers, proxies=proxies, timeout=60, impersonate="chrome110", verify=False)
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
@@ -311,19 +305,21 @@ class Dawn:
                     await asyncio.sleep(5)
                     continue
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}Error    :{Style.RESET_ALL}"
-                    f"{Fore.RED+Style.BRIGHT} GET Puzzle Id Failed {Style.RESET_ALL}"
-                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
-                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                    f"{Fore.CYAN+Style.BRIGHT} Message : {Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT}Fetch PuzzleId Failed{Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT} - {Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
                 )
-
-        return None
+                return None
 
     async def get_puzzle_image(self, email: str, puzzle_id: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/chromeapi/dawn/v1/puzzle/get-puzzle-image?puzzle_id={puzzle_id}&appid={self.app_id[email]}"
+        headers = self.HEADERS[email].copy()
         for attempt in range(retries):
+            proxies = {"http":proxy, "https":proxy} if proxy else None
             try:
-                response = await asyncio.to_thread(requests.get, url=url, headers=self.headers, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
+                response = await asyncio.to_thread(requests.get, url=url, headers=headers, proxies=proxies, timeout=60, impersonate="chrome110", verify=False)
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
@@ -331,25 +327,24 @@ class Dawn:
                     await asyncio.sleep(5)
                     continue
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}Error    :{Style.RESET_ALL}"
-                    f"{Fore.RED+Style.BRIGHT} GET Puzzle Image Failed {Style.RESET_ALL}"
-                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
-                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                    f"{Fore.CYAN+Style.BRIGHT} Message : {Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT}Fetch ImageB64 Failed{Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT} - {Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
                 )
-
-        return None
+                return None
 
     async def user_login(self, email: str, puzzle_id: str, answer: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/chromeapi/dawn/v1/user/login/v2?appid={self.app_id[email]}"
         data = json.dumps(self.generate_login_payload(email, puzzle_id, answer))
-        headers = {
-            **self.headers,
-            "Content-Length": str(len(data)),
-            "Content-Type": "application/json"
-        }
+        headers = self.HEADERS[email].copy()
+        headers["Content-Length"] = str(len(data))
+        headers["Content-Type"] ="application/json"
         for attempt in range(retries):
+            proxies = {"http":proxy, "https":proxy} if proxy else None
             try:
-                response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxy=proxy, timeout=60, impersonate="chrome110", verify=False)
+                response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxies=proxies, timeout=60, impersonate="chrome110", verify=False)
                 if response.status_code == 400:
                     msg = response.json().get("message", "Unknown error (400)")
                     raise Exception(f"HTTP 400 Bad Request: {msg}")
@@ -359,8 +354,8 @@ class Dawn:
             except Exception as e:
                 if isinstance(e, Exception) and 'HTTP 400 Bad Request' in str(e):
                     self.log(
-                        f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
-                        f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
+                        f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT} Status  : {Style.RESET_ALL}"
                         f"{Fore.RED+Style.BRIGHT}Login Failed{Style.RESET_ALL}"
                         f"{Fore.MAGENTA+Style.BRIGHT} - {Style.RESET_ALL}"
                         f"{Fore.YELLOW+Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
@@ -370,32 +365,31 @@ class Dawn:
                     await asyncio.sleep(5)
                     continue
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
-                    f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                    f"{Fore.CYAN+Style.BRIGHT} Status  : {Style.RESET_ALL}"
                     f"{Fore.RED+Style.BRIGHT}Login Failed{Style.RESET_ALL}"
                     f"{Fore.MAGENTA+Style.BRIGHT} - {Style.RESET_ALL}"
                     f"{Fore.YELLOW+Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
                 )
-
-        return None
+                return None
             
     async def process_check_connection(self, email: str, use_proxy: bool, rotate_proxy: bool):
         while True:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Proxy    :{Style.RESET_ALL}"
+                f"{Fore.CYAN+Style.BRIGHT}Proxy  :{Style.RESET_ALL}"
                 f"{Fore.WHITE+Style.BRIGHT} {proxy} {Style.RESET_ALL}"
             )
 
             is_valid = await self.check_connection(proxy)
-            if is_valid and is_valid.get("status") == "success":
+            if is_valid:
                 return True
             
             if rotate_proxy:
                 proxy = self.rotate_proxy_for_account(email)
+                continue
 
-            await asyncio.sleep(5)
-            continue
+            return False
 
     async def process_accounts(self, email: str, use_proxy: bool, rotate_proxy: bool):
         is_valid = await self.process_check_connection(email, use_proxy, rotate_proxy)
@@ -403,27 +397,40 @@ class Dawn:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
 
             while True:
+                self.log(f"{Fore.CYAN+Style.BRIGHT}Puzzle :{Style.RESET_ALL}")
+
                 get_puzzle = await self.get_puzzle_id(email, proxy)
                 if isinstance(get_puzzle, dict) and get_puzzle.get("success"):
                     puzzle_id = get_puzzle["puzzle_id"]
 
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}Puzzle Id:{Style.RESET_ALL}"
-                        f"{Fore.WHITE+Style.BRIGHT} {puzzle_id} {Style.RESET_ALL}"
+                        f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT} PuzzleId: {Style.RESET_ALL}"
+                        f"{Fore.WHITE+Style.BRIGHT}{puzzle_id}{Style.RESET_ALL}"
                     )
 
                     get_image = await self.get_puzzle_image(email, puzzle_id, proxy)
                     if isinstance(get_image, dict) and get_image.get("success"):
                         puzzle_image = get_image["imgBase64"]
 
-                        self.log(f"{Fore.CYAN+Style.BRIGHT}Captcha  :{Style.RESET_ALL}")
+                        self.log(
+                            f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                            f"{Fore.CYAN+Style.BRIGHT} ImageB64: {Style.RESET_ALL}"
+                            f"{Fore.WHITE+Style.BRIGHT}{puzzle_image[:32]}...{Style.RESET_ALL}"
+                        )
+
+                        self.log(f"{Fore.CYAN+Style.BRIGHT}Captcha:{Style.RESET_ALL}")
+                        self.log(
+                            f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                            f"{Fore.YELLOW+Style.BRIGHT} Solving Image to Text Captcha... {Style.RESET_ALL}"
+                        )
 
                         answer = await self.solve_recaptcha(puzzle_image, proxy)
                         if not answer:
                             self.log(
-                                f"{Fore.MAGENTA+Style.BRIGHT}     >{Style.RESET_ALL}"
-                                f"{Fore.CYAN+Style.BRIGHT} Status: {Style.RESET_ALL}"
-                                f"{Fore.RED+Style.BRIGHT}Puzzle Images Not Solved{Style.RESET_ALL}"
+                                f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                                f"{Fore.CYAN+Style.BRIGHT} Message : {Style.RESET_ALL}"
+                                f"{Fore.RED+Style.BRIGHT}Image to Text Captcha Not Solved{Style.RESET_ALL}"
                             )
                             continue
 
@@ -434,8 +441,9 @@ class Dawn:
                             self.save_tokens([{"Email":email, "Token":token}])
 
                             self.log(
-                                f"{Fore.CYAN+Style.BRIGHT}Status   :{Style.RESET_ALL}"
-                                f"{Fore.GREEN+Style.BRIGHT} Token Have Been Saved Successfully {Style.RESET_ALL}"
+                                f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                                f"{Fore.CYAN+Style.BRIGHT} Status  : {Style.RESET_ALL}"
+                                f"{Fore.GREEN+Style.BRIGHT}Token Have Been Saved Successfully{Style.RESET_ALL}"
                             )
                             break
                     
@@ -484,13 +492,23 @@ class Dawn:
 
                     if not "@" in email or not password:
                         self.log(
-                            f"{Fore.CYAN+Style.BRIGHT}Status   :{Style.RESET_ALL}"
+                            f"{Fore.CYAN+Style.BRIGHT}Status :{Style.RESET_ALL}"
                             f"{Fore.RED+Style.BRIGHT} Invalid Account Data {Style.RESET_ALL}"
                         )
                         continue
 
+                    self.HEADERS[email] = {
+                        "Accept": "*/*",
+                        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+                        "Origin": "chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp",
+                        "Sec-Fetch-Dest": "empty",
+                        "Sec-Fetch-Mode": "cors",
+                        "Sec-Fetch-Site": "cross-site",
+                        "User-Agent": FakeUserAgent().random
+                    }
+
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}Email    :{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT}Email  :{Style.RESET_ALL}"
                         f"{Fore.WHITE+Style.BRIGHT} {self.mask_account(email)} {Style.RESET_ALL}"
                     )
 
