@@ -154,7 +154,7 @@ class Dawn:
                 "username":email,
                 "password":self.password[email],
                 "logindata":{
-                    "_v":{ "version":"1.1.9" },
+                    "_v":{ "version":"1.2.1" },
                     "datetime":current_time
                 },
                 "puzzle_id":puzzle_id,

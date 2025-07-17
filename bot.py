@@ -121,7 +121,7 @@ class Dawn:
                 "username":email,
                 "extensionid":self.EXTENSION_ID,
                 "numberoftabs":0,
-                "_v":"1.1.9"
+                "_v":"1.2.1"
             }
 
             return payload
