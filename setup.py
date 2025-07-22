@@ -9,6 +9,7 @@ wib = pytz.timezone('Asia/Jakarta')
 class Dawn:
     def __init__(self) -> None:
         self.BASE_API = "https://ext-api.dawninternet.com"
+        self.VERSION = "1.2.2"
         self.CAPTCHA_KEY = None
         self.HEADERS = {}
         self.proxies = []
@@ -154,7 +155,7 @@ class Dawn:
                 "username":email,
                 "password":self.password[email],
                 "logindata":{
-                    "_v":{ "version":"1.2.1" },
+                    "_v":{ "version":self.VERSION },
                     "datetime":current_time
                 },
                 "puzzle_id":puzzle_id,
@@ -221,11 +222,17 @@ class Dawn:
             )
             return None
     
-    async def solve_recaptcha(self, puzzle_image: str, proxy=None, retries=5):
+    async def solve_recaptcha(self, puzzle_image: str, retries=5):
         for attempt in range(retries):
-            proxies = {"http":proxy, "https":proxy} if proxy else None
             try:
                 if self.CAPTCHA_KEY is None:
+                    self.log(
+                        f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT} Status  : {Style.RESET_ALL}"
+                        f"{Fore.RED+Style.BRIGHT}Image to Text Captcha Not Solved{Style.RESET_ALL}"
+                        f"{Fore.MAGENTA+Style.BRIGHT} - {Style.RESET_ALL}"
+                        f"{Fore.YELLOW+Style.BRIGHT}2Captcha Key Is None{Style.RESET_ALL}"
+                    )
                     return None
                 
                 response = await asyncio.to_thread(requests.post, "https://2captcha.com/in.php", json={
@@ -233,12 +240,19 @@ class Dawn:
                     "method": "base64",
                     "body": puzzle_image,
                     "json": 1
-                }, proxies=proxies, impersonate="chrome110", verify=False)
+                })
 
                 response.raise_for_status()
                 result = response.json()
 
                 if result.get("status") != 1:
+                    err_text = result.get("error_text", "Unknown Error")
+
+                    self.log(
+                        f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT} Message : {Style.RESET_ALL}"
+                        f"{Fore.YELLOW+Style.BRIGHT}{err_text}{Style.RESET_ALL}"
+                    )
                     await asyncio.sleep(5)
                     continue
 
@@ -255,7 +269,7 @@ class Dawn:
                         "action": "get",
                         "id": request_id,
                         "json": 1
-                    }, proxies=proxies, impersonate="chrome110", verify=False)
+                    })
 
                     res_response.raise_for_status()
                     res_result = res_response.json()
@@ -289,6 +303,13 @@ class Dawn:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
+                self.log(
+                    f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                    f"{Fore.CYAN+Style.BRIGHT} Status  : {Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT}Image to Text Captcha Not Solved{Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT} - {Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
+                )
                 return None
 
     async def get_puzzle_id(self, email: str, proxy=None, retries=5):
@@ -425,13 +446,8 @@ class Dawn:
                             f"{Fore.YELLOW+Style.BRIGHT} Solving Image to Text Captcha... {Style.RESET_ALL}"
                         )
 
-                        answer = await self.solve_recaptcha(puzzle_image, proxy)
+                        answer = await self.solve_recaptcha(puzzle_image)
                         if not answer:
-                            self.log(
-                                f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
-                                f"{Fore.CYAN+Style.BRIGHT} Message : {Style.RESET_ALL}"
-                                f"{Fore.RED+Style.BRIGHT}Image to Text Captcha Not Solved{Style.RESET_ALL}"
-                            )
                             continue
 
                         login = await self.user_login(email, puzzle_id, answer, proxy)

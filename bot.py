@@ -10,6 +10,7 @@ class Dawn:
     def __init__(self) -> None:
         self.BASE_API = "https://ext-api.dawninternet.com"
         self.EXTENSION_ID = "fpdkjdnhkakefebpekbdhillbhonfjjp"
+        self.VERSION = "1.2.2"
         self.HEADERS = {}
         self.proxies = []
         self.proxy_index = 0
@@ -121,7 +122,7 @@ class Dawn:
                 "username":email,
                 "extensionid":self.EXTENSION_ID,
                 "numberoftabs":0,
-                "_v":"1.2.1"
+                "_v":self.VERSION
             }
 
             return payload
