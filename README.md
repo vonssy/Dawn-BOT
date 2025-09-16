@@ -174,7 +174,7 @@ When starting the bot, you'll be prompted to choose:
 
 ## 🌐 Proxy Recommendation
 
-<div align="center">
+<div align="left">
   <img src="images/banner.png" alt="NST Proxy Banner" width="300">
 </div>
 
