@@ -89,22 +89,14 @@ class Dawn:
         except Exception as e:
             return None
     
-    async def load_proxies(self, use_proxy_choice: int):
+    async def load_proxies(self):
         filename = "proxy.txt"
         try:
-            if use_proxy_choice == 1:
-                response = await asyncio.to_thread(requests.get, "https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/all.txt")
-                response.raise_for_status()
-                content = response.text
-                with open(filename, 'w') as f:
-                    f.write(content)
-                self.proxies = [line.strip() for line in content.splitlines() if line.strip()]
-            else:
-                if not os.path.exists(filename):
-                    self.log(f"{Fore.RED + Style.BRIGHT}File {filename} Not Found.{Style.RESET_ALL}")
-                    return
-                with open(filename, 'r') as f:
-                    self.proxies = [line.strip() for line in f.read().splitlines() if line.strip()]
+            if not os.path.exists(filename):
+                self.log(f"{Fore.RED + Style.BRIGHT}File {filename} Not Found.{Style.RESET_ALL}")
+                return
+            with open(filename, 'r') as f:
+                self.proxies = [line.strip() for line in f.read().splitlines() if line.strip()]
             
             if not self.proxies:
                 self.log(f"{Fore.RED + Style.BRIGHT}No Proxies Found.{Style.RESET_ALL}")
@@ -152,15 +144,15 @@ class Dawn:
             current_time = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace("+00:00", "Z")
 
             payload = {
-                "username":email,
-                "password":self.password[email],
-                "logindata":{
-                    "_v":{ "version":self.VERSION },
-                    "datetime":current_time
+                "username": email,
+                "password": self.password[email],
+                "logindata": {
+                    "_v": { "version": self.VERSION },
+                    "datetime": current_time
                 },
-                "puzzle_id":puzzle_id,
-                "ans":answer,
-                "appid":self.app_id[email]
+                "puzzle_id": puzzle_id,
+                "ans": answer,
+                "appid": self.app_id[email]
             }
 
             return payload
@@ -176,35 +168,33 @@ class Dawn:
     def print_question(self):
         while True:
             try:
-                print(f"{Fore.WHITE + Style.BRIGHT}1. Run With Free Proxyscrape Proxy{Style.RESET_ALL}")
-                print(f"{Fore.WHITE + Style.BRIGHT}2. Run With Private Proxy{Style.RESET_ALL}")
-                print(f"{Fore.WHITE + Style.BRIGHT}3. Run Without Proxy{Style.RESET_ALL}")
-                choose = int(input(f"{Fore.BLUE + Style.BRIGHT}Choose [1/2/3] -> {Style.RESET_ALL}").strip())
+                print(f"{Fore.WHITE + Style.BRIGHT}1. Run With Proxy{Style.RESET_ALL}")
+                print(f"{Fore.WHITE + Style.BRIGHT}2. Run Without Proxy{Style.RESET_ALL}")
+                proxy_choice = int(input(f"{Fore.BLUE + Style.BRIGHT}Choose [1/2] -> {Style.RESET_ALL}").strip())
 
-                if choose in [1, 2, 3]:
+                if proxy_choice in [1, 2]:
                     proxy_type = (
-                        "With Free Proxyscrape" if choose == 1 else 
-                        "With Private" if choose == 2 else 
+                        "With" if proxy_choice == 1 else 
                         "Without"
                     )
                     print(f"{Fore.GREEN + Style.BRIGHT}Run {proxy_type} Proxy Selected.{Style.RESET_ALL}")
                     break
                 else:
-                    print(f"{Fore.RED + Style.BRIGHT}Please enter either 1, 2 or 3.{Style.RESET_ALL}")
+                    print(f"{Fore.RED + Style.BRIGHT}Please enter either 1  or 2.{Style.RESET_ALL}")
             except ValueError:
-                print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number (1, 2 or 3).{Style.RESET_ALL}")
+                print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number (1  or 2).{Style.RESET_ALL}")
 
-        rotate = False
-        if choose in [1, 2]:
+        rotate_proxy = False
+        if proxy_choice == 1:
             while True:
-                rotate = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Style.RESET_ALL}").strip()
-                if rotate in ["y", "n"]:
-                    rotate = rotate == "y"
+                rotate_proxy = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Style.RESET_ALL}").strip()
+                if rotate_proxy in ["y", "n"]:
+                    rotate_proxy = rotate_proxy == "y"
                     break
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter 'y' or 'n'.{Style.RESET_ALL}")
 
-        return choose, rotate
+        return proxy_choice, rotate_proxy
     
     async def check_connection(self, proxy=None):
         url = "https://api.ipify.org?format=json"
@@ -221,33 +211,33 @@ class Dawn:
                 f"{Fore.YELLOW + Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
             )
             return None
-    
+        
     async def solve_recaptcha(self, puzzle_image: str, retries=5):
         for attempt in range(retries):
             try:
                 if self.CAPTCHA_KEY is None:
                     self.log(
                         f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
-                        f"{Fore.CYAN+Style.BRIGHT} Status  : {Style.RESET_ALL}"
-                        f"{Fore.RED+Style.BRIGHT}Image to Text Captcha Not Solved{Style.RESET_ALL}"
-                        f"{Fore.MAGENTA+Style.BRIGHT} - {Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT} Message : {Style.RESET_ALL}"
                         f"{Fore.YELLOW+Style.BRIGHT}2Captcha Key Is None{Style.RESET_ALL}"
                     )
                     return None
                 
-                response = await asyncio.to_thread(requests.post, "https://2captcha.com/in.php", json={
-                    "key": self.CAPTCHA_KEY,
-                    "method": "base64",
-                    "body": puzzle_image,
-                    "json": 1
-                })
+                response = await asyncio.to_thread(requests.post, 
+                "https://2captcha.com/in.php", 
+                    data={
+                        "key": self.CAPTCHA_KEY,
+                        "method": "base64",
+                        "body": puzzle_image,
+                        "json": 1
+                    }, impersonate="chrome110", verify=False
+                )
 
                 response.raise_for_status()
                 result = response.json()
 
                 if result.get("status") != 1:
                     err_text = result.get("error_text", "Unknown Error")
-
                     self.log(
                         f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
                         f"{Fore.CYAN+Style.BRIGHT} Message : {Style.RESET_ALL}"
@@ -264,12 +254,15 @@ class Dawn:
                 )
 
                 for _ in range(30):
-                    res_response = await asyncio.to_thread(requests.get, "https://2captcha.com/res.php", params={
-                        "key": self.CAPTCHA_KEY,
-                        "action": "get",
-                        "id": request_id,
-                        "json": 1
-                    })
+                    res_response = await asyncio.to_thread(requests.get, 
+                        "https://2captcha.com/res.php", 
+                        params={
+                            "key": self.CAPTCHA_KEY,
+                            "action": "get",
+                            "id": request_id,
+                            "json": 1
+                        }, impersonate="chrome110", verify=False
+                    )
 
                     res_response.raise_for_status()
                     res_result = res_response.json()
@@ -288,6 +281,7 @@ class Dawn:
                             f"{Fore.WHITE+Style.BRIGHT}{answer}{Style.RESET_ALL}"
                         )
                         return answer
+                    
                     elif res_result.get("request") == "CAPCHA_NOT_READY":
                         self.log(
                             f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
@@ -296,7 +290,13 @@ class Dawn:
                         )
                         await asyncio.sleep(5)
                         continue
+
                     else:
+                        self.log(
+                            f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                            f"{Fore.CYAN+Style.BRIGHT} Status  : {Style.RESET_ALL}"
+                            f"{Fore.RED+Style.BRIGHT}Image to Text Captcha Not Solved After Max Attempt{Style.RESET_ALL}"
+                        )
                         break
 
             except Exception as e:
@@ -328,7 +328,7 @@ class Dawn:
                 self.log(
                     f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
                     f"{Fore.CYAN+Style.BRIGHT} Message : {Style.RESET_ALL}"
-                    f"{Fore.RED+Style.BRIGHT}Fetch PuzzleId Failed{Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT}Fetch Puzzle Id Failed{Style.RESET_ALL}"
                     f"{Fore.MAGENTA+Style.BRIGHT} - {Style.RESET_ALL}"
                     f"{Fore.YELLOW+Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
                 )
@@ -408,6 +408,7 @@ class Dawn:
             
             if rotate_proxy:
                 proxy = self.rotate_proxy_for_account(email)
+                await asyncio.sleep(1)
                 continue
 
             return False
@@ -448,6 +449,11 @@ class Dawn:
 
                         answer = await self.solve_recaptcha(puzzle_image)
                         if not answer:
+                            self.log(
+                                f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                                f"{Fore.CYAN+Style.BRIGHT} Message : {Style.RESET_ALL}"
+                                f"{Fore.RED+Style.BRIGHT}Image to Text Captcha Not Solved{Style.RESET_ALL}"
+                            )
                             continue
 
                         login = await self.user_login(email, puzzle_id, answer, proxy)
@@ -476,11 +482,7 @@ class Dawn:
             if captcha_key:
                 self.CAPTCHA_KEY = captcha_key
             
-            use_proxy_choice, rotate_proxy = self.print_question()
-
-            use_proxy = False
-            if use_proxy_choice in [1, 2]:
-                use_proxy = True
+            proxy_choice, rotate_proxy = self.print_question()
 
             self.clear_terminal()
             self.welcome()
@@ -489,8 +491,9 @@ class Dawn:
                 f"{Fore.WHITE + Style.BRIGHT}{len(accounts)}{Style.RESET_ALL}"
             )
 
+            use_proxy = True if proxy_choice == 1 else False
             if use_proxy:
-                await self.load_proxies(use_proxy_choice)
+                await self.load_proxies()
 
             separator = "=" * 27
             for idx, account in enumerate(accounts, start=1):
