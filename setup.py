@@ -268,7 +268,7 @@ class Dawn:
                     res_result = res_response.json()
 
                     if res_result.get("status") == 1:
-                        answer = res_result["request"]
+                        answer = res_result["request"].upper()
 
                         self.log(
                             f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
