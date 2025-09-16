@@ -97,7 +97,7 @@ The bot can automatically fetch tokens using your 2captcha key through the setup
 If you prefer to fetch tokens manually or don't have a 2captcha key, you can extract tokens from the Dawn Validator dashboard:
 
 <div align="center">
-  <img src="example.png" alt="Dawn Token Example" width="500">
+  <img src="images/example.png" alt="Dawn Token Example" width="500">
   <p><em>Example of fetching bearer tokens manually from Dawn Validator dashboard</em></p>
 </div>
 
