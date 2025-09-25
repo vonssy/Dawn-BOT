@@ -1,22 +1,21 @@
-from curl_cffi import requests
+from aiohttp import ClientResponseError, ClientSession, ClientTimeout, BasicAuth
+from aiohttp_socks import ProxyConnector
 from fake_useragent import FakeUserAgent
-from datetime import datetime
+from datetime import datetime, timezone
 from colorama import *
-import asyncio, json, os, pytz, uuid
+import asyncio, json, pytz, re, os
 
 wib = pytz.timezone('Asia/Jakarta')
 
 class Dawn:
     def __init__(self) -> None:
-        self.BASE_API = "https://ext-api.dawninternet.com"
-        self.EXTENSION_ID = "fpdkjdnhkakefebpekbdhillbhonfjjp"
-        self.VERSION = "1.2.2"
+        self.BASE_API = "https://api.dawninternet.com"
         self.HEADERS = {}
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
-        self.tokens = {}
-        self.app_id = {}
+        self.user_ids = {}
+        self.session_tokens = {}
 
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -102,24 +101,26 @@ class Dawn:
         self.account_proxies[account] = proxy
         self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
         return proxy
-            
-    def generate_app_id(self):
-        prefix = "67"
-        app_id = prefix + uuid.uuid4().hex[len(prefix):]
-        return app_id
     
-    def generate_keepalive_payload(self, email: str):
-        try:
-            payload = {
-                "username": email,
-                "extensionid": self.EXTENSION_ID,
-                "numberoftabs": 0,
-                "_v": self.VERSION
-            }
+    def build_proxy_config(self, proxy=None):
+        if not proxy:
+            return None, None, None
 
-            return payload
-        except Exception as e:
-            raise Exception(f"Generate Req Payload Failed: {str(e)}")
+        if proxy.startswith("socks"):
+            connector = ProxyConnector.from_url(proxy)
+            return connector, None, None
+
+        elif proxy.startswith("http"):
+            match = re.match(r"http://(.*?):(.*?)@(.*)", proxy)
+            if match:
+                username, password, host_port = match.groups()
+                clean_url = f"http://{host_port}"
+                auth = BasicAuth(username, password)
+                return None, clean_url, auth
+            else:
+                return None, proxy, None
+
+        raise Exception("Unsupported Proxy Type.")
     
     def mask_account(self, account):
         if "@" in account:
@@ -171,32 +172,35 @@ class Dawn:
 
         return proxy_choice, rotate_proxy
 
-    async def check_connection(self, email: str, proxy=None):
-        url = "https://api.ipify.org?format=json"
-        proxies = {"http":proxy, "https":proxy} if proxy else None
+    async def check_connection(self, email: str, proxy_url=None):
+        connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
         try:
-            response = await asyncio.to_thread(requests.get, url=url, proxies=proxies, timeout=30, impersonate="chrome110", verify=False)
-            response.raise_for_status()
-            return True
-        except Exception as e:
+            async with ClientSession(connector=connector, timeout=ClientTimeout(total=10)) as session:
+                async with session.get(url="https://api.ipify.org?format=json", proxy=proxy, proxy_auth=proxy_auth) as response:
+                    response.raise_for_status()
+                    return True
+        except (Exception, ClientResponseError) as e:
             self.print_message(email, proxy, Fore.RED, f"Connection Not 200 OK: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
             return None
 
-    async def user_data(self, email: str, proxy=None, retries=5):
-        url = f"{self.BASE_API}/api/atom/v1/userreferral/getpoint?appid={self.app_id[email]}"
-        headers = self.HEADERS[email].copy()
-        headers["Authorization"] = f"Berear {self.tokens[email]}"
-        headers["Content-Type"] = "application/json"
+    async def user_point(self, email: str, proxy_url=None, retries=5):
+        url = f"{self.BASE_API}/point?user_id={self.user_ids[email]}"
+        headers = {
+            **self.HEADERS[email],
+            "Authorization": f"Bearer {self.session_tokens[email]}"
+        }
+        
         for attempt in range(retries):
-            proxies = {"http":proxy, "https":proxy} if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
-                response = await asyncio.to_thread(requests.get, url=url, headers=headers, proxies=proxies, timeout=60, impersonate="chrome110", verify=False)
-                if response.status_code == 401:
-                    self.print_message(email, proxy, Fore.RED, f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}Token Already Expired")
-                    return None
-                response.raise_for_status()
-                return response.json()
-            except Exception as e:
+                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
+                    async with session.get(url=url, headers=headers, proxy=proxy, proxy_auth=proxy_auth) as response:
+                        if response.status == 401:
+                            self.print_message(email, proxy, Fore.RED, f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}Token Already Expired")
+                            return None
+                        response.raise_for_status()
+                        return await response.json()
+            except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
@@ -204,57 +208,59 @@ class Dawn:
 
         return None
 
-    async def send_keepalive(self, email: str, proxy=None, retries=5):
-        url = f"{self.BASE_API}/chromeapi/dawn/v1/userreward/keepalive?appid={self.app_id[email]}"
-        data = json.dumps(self.generate_keepalive_payload(email))
-        headers = self.HEADERS[email].copy()
-        headers["Authorization"] = f"Berear {self.tokens[email]}"
-        headers["Content-Length"] = str(len(data))
-        headers["Content-Type"] = "application/json"
+    async def extension_ping(self, email: str, proxy_url=None, retries=5):
+        url = f"{self.BASE_API}/ping?role=extension"
+        data = json.dumps({
+            "user_id": self.user_ids[email], 
+            "extension_id": "fpdkjdnhkakefebpekbdhillbhonfjjp", 
+            "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        })
+        headers = {
+            **self.HEADERS[email],
+            "Authorization": f"Bearer {self.session_tokens[email]}",
+            "Content-Length": str(len(data)),
+            "Content-Type": "application/json"
+        }
+        
         for attempt in range(retries):
-            proxies = {"http":proxy, "https":proxy} if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
-                response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxies=proxies, timeout=60, impersonate="chrome110", verify=False)
-                if response.status_code == 401:
-                    self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Token Already Expired")
-                    return None
-                response.raise_for_status()
-                return response.json()
-            except Exception as e:
+                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
+                    async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
+                        if response.status == 401:
+                            self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Token Already Expired")
+                            return None
+                        response.raise_for_status()
+                        return await response.json()
+            except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
                 self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
 
         return None
-            
+
     async def process_check_connection(self, email: str, use_proxy: bool, rotate_proxy: bool):
         while True:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
 
             is_valid = await self.check_connection(email, proxy)
-            if is_valid:
-                return True
+            if is_valid: return True
             
             if rotate_proxy:
                 proxy = self.rotate_proxy_for_account(email)
+                
+            await asyncio.sleep(1)
             
     async def process_user_earning(self, email: str, use_proxy: bool):
         while True:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
 
-            user = await self.user_data(email, proxy)
-            if isinstance(user, dict) and user.get("success"):
-                referral_point = user.get("data", {}).get("referralPoint", {}).get("commission", 0) 
-                reward_point = user.get("data", {}).get("rewardPoint", {})
-
-                reward_points = sum(
-                    value for key, value in reward_point.items() if "points" in key.lower() and isinstance(value, (int, float))
-                )
-
-                total_points = referral_point + reward_points
+            user = await self.user_point(email, proxy)
+            if user:
+                points = user.get("points", 0)
                 
-                self.print_message(email, proxy, Fore.WHITE, f"Earning {total_points:.0f} PTS")
+                self.print_message(email, proxy, Fore.WHITE, f"Earning {points} PTS")
 
             await asyncio.sleep(5 * 60) 
 
@@ -270,14 +276,14 @@ class Dawn:
                 flush=True
             )
 
-            keepalive = await self.send_keepalive(email, proxy)
-            if isinstance(keepalive, dict) and keepalive.get("success"):
-                server_name = keepalive.get("s") or "N/A"
+            keepalive = await self.extension_ping(email, proxy)
+            if keepalive:
+                message = keepalive.get("message")
 
                 self.print_message(email, proxy, Fore.GREEN, "PING Success "
                     f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
-                    f"{Fore.CYAN + Style.BRIGHT} Server Name: {Style.RESET_ALL}"
-                    f"{Fore.WHITE + Style.BRIGHT}{server_name}{Style.RESET_ALL}"
+                    f"{Fore.CYAN + Style.BRIGHT} Message: {Style.RESET_ALL}"
+                    f"{Fore.BLUE + Style.BRIGHT}{message}{Style.RESET_ALL}"
                 )
 
             print(
@@ -323,10 +329,11 @@ class Dawn:
             tasks = []
             for idx, account in enumerate(accounts, start=1):
                 if account:
-                    email = account["Email"]
-                    token = account["Token"]
+                    email = account["email"]
+                    user_id = account["userId"]
+                    session_token = account["sessionToken"]
 
-                    if not "@" in email or not token:
+                    if not "@" in email or not user_id or not session_token:
                         self.log(
                             f"{Fore.CYAN + Style.BRIGHT}[ Account: {Style.RESET_ALL}"
                             f"{Fore.WHITE + Style.BRIGHT}{idx}{Style.RESET_ALL}"
@@ -347,8 +354,8 @@ class Dawn:
                         "User-Agent": FakeUserAgent().random
                     }
 
-                    self.tokens[email] = token
-                    self.app_id[email] = self.generate_app_id()
+                    self.user_ids[email] = user_id
+                    self.session_tokens[email] = session_token
 
                     tasks.append(asyncio.create_task(self.process_accounts(email, use_proxy, rotate_proxy)))
 

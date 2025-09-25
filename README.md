@@ -24,7 +24,7 @@ Dawn Validator BOT is an automated tool designed to manage Dawn Validator nodes 
 
 **🔗 Get Started:** [Register on Dawn Validator](https://dashboard.dawninternet.com/signup)
 
-> **Referral Code:** Use code `02lt4r` during registration for benefits!
+> **Referral Code:** Use code `VCDXB2W3` during registration for benefits!
 
 **📥 Extension:** [Download Chrome Extension](https://chromewebstore.google.com/detail/dawn-validator-chrome-ext/fpdkjdnhkakefebpekbdhillbhonfjjp?hl=en)
 
@@ -34,15 +34,13 @@ Dawn Validator BOT is an automated tool designed to manage Dawn Validator nodes 
 - 🔄 **Automated Account Management** - Retrieve account information automatically
 - 🌐 **Flexible Proxy Support** - Run with or without proxy configuration
 - 🔀 **Smart Proxy Rotation** - Automatic rotation of invalid proxies
-- 💓 **Keep-Alive System** - Automated keep-alive signals every 10 minutes
+- 💓 **Ping System** - Automated ping signals every 10 minutes
 - ⚡ **Multi-Threading Support** - Handle multiple accounts simultaneously
-- 🤖 **2captcha Integration** - Optional captcha solving capability
 
 ## 📋 Requirements
 
 - **Python:** Version 3.9 or higher
 - **pip:** Latest version recommended
-- **2captcha Key:** Optional (for automated captcha solving)
 
 ## 🛠 Installation
 
@@ -63,57 +61,13 @@ pip3 install -r requirements.txt
 
 ## ⚙️ Configuration
 
-### 2captcha Key Setup (Optional)
-
-Create or edit `2captcha_key.txt` in the project directory:
-
-```
-your_2captcha_key
-```
-
 ### Account Configuration
 
-Create or edit `accounts.json` in the project directory:
+Create or edit `emails.txt` in the project directory:
 
-```json
-[
-    {
-        "Email": "your_email_address_1",
-        "Password": "your_password_1"
-    },
-    {
-        "Email": "your_email_address_2",
-        "Password": "your_password_2"
-    }
-]
 ```
-
-### Automatic Token Generation
-
-The bot can automatically fetch tokens using your 2captcha key through the setup script. This eliminates the need for manual token extraction.
-
-### Manual Token Setup (Alternative)
-
-If you prefer to fetch tokens manually or don't have a 2captcha key, you can extract tokens from the Dawn Validator dashboard:
-
-<div align="center">
-  <img src="images/example.png" alt="Dawn Token Example" width="500">
-  <p><em>Example of fetching bearer tokens manually from Dawn Validator dashboard</em></p>
-</div>
-
-Create or edit `tokens.json`:
-
-```json
-[
-    {
-        "Email": "your_email_address_1",
-        "Token": "your_bearer_token_1"
-    },
-    {
-        "Email": "your_email_address_2",
-        "Token": "your_bearer_token_2"
-    }
-]
+your_email_address_1
+your_email_address_2
 ```
 
 ### Proxy Configuration (Optional)
@@ -134,9 +88,9 @@ http://username:password@192.168.1.1:8080
 
 ## 🚀 Setup & Usage
 
-### Automatic Token Setup (Recommended)
+### Automatic Token Setup
 
-Run the setup script to automatically fetch tokens using your configured 2captcha key and account credentials:
+Run the setup script to automatically fetch tokens using your configured account credentials:
 
 ```bash
 python setup.py
@@ -146,7 +100,6 @@ python3 setup.py
 
 > **💡 What does setup.py do?**
 > - Automatically logs in to your Dawn Validator accounts
-> - Solves captchas using your 2captcha key
 > - Extracts bearer tokens automatically
 > - Saves tokens to `tokens.json` for the bot to use
 
