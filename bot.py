@@ -258,9 +258,11 @@ class Dawn:
 
             user = await self.user_point(email, proxy)
             if user:
-                points = user.get("points", 0)
+                node_points = user.get("points", 0)
+                referral_points = user.get("referral_points", 0)
+                total_points = node_points + referral_points
                 
-                self.print_message(email, proxy, Fore.WHITE, f"Earning {points} PTS")
+                self.print_message(email, proxy, Fore.WHITE, f"Earning {total_points} PTS")
 
             await asyncio.sleep(5 * 60) 
 
@@ -293,7 +295,7 @@ class Dawn:
                 end="\r",
                 flush=True
             )
-            await asyncio.sleep(10 * 60)
+            await asyncio.sleep(10.5 * 60)
         
     async def process_accounts(self, email: str, use_proxy: bool, rotate_proxy: bool):
         is_valid = await self.process_check_connection(email, use_proxy, rotate_proxy)
