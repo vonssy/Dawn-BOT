@@ -11,7 +11,7 @@ class Dawn:
     def __init__(self) -> None:
         self.BASE_API = "https://api.dawninternet.com"
         self.PRIVY_API = "https://auth.privy.io/api/v1"
-        self.REF_CODE = "VCDXB2W3" # U can change it with yours
+        self.REF_CODE = "02lt4r" # U can change it with yours
         self.BASE_HEADERS = {}
         self.PRIVY_HEADERS = {}
         self.proxies = []

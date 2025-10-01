@@ -208,12 +208,12 @@ class Dawn:
 
         return None
 
-    async def extension_ping(self, email: str, proxy_url=None, retries=5):
+    async def extension_ping(self, email: str, timestamp: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/ping?role=extension"
         data = json.dumps({
             "user_id": self.user_ids[email], 
             "extension_id": "fpdkjdnhkakefebpekbdhillbhonfjjp", 
-            "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            "timestamp": timestamp
         })
         headers = {
             **self.HEADERS[email],
@@ -221,7 +221,6 @@ class Dawn:
             "Content-Length": str(len(data)),
             "Content-Type": "application/json"
         }
-        
         for attempt in range(retries):
             connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
@@ -273,7 +272,7 @@ class Dawn:
         while True:
             proxy = self.get_next_proxy_for_account(email) if use_proxy else None
 
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)
 
             print(
                 f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
@@ -283,9 +282,11 @@ class Dawn:
                 flush=True
             )
 
-            await asyncio.sleep(random.randint(630, 660))
+            await asyncio.sleep(10 * 60)
 
-            keepalive = await self.extension_ping(email, proxy)
+            timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+            keepalive = await self.extension_ping(email, timestamp, proxy)
             if keepalive:
                 message = keepalive.get("message")
 
