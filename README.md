@@ -34,7 +34,7 @@ Dawn Validator BOT is an automated tool designed to manage Dawn Validator nodes 
 - 🔄 **Automated Account Management** - Retrieve account information automatically
 - 🌐 **Flexible Proxy Support** - Run with or without proxy configuration
 - 🔀 **Smart Proxy Rotation** - Automatic rotation of invalid proxies
-- 💓 **Ping System** - Automated ping signals every 10 minutes
+- 💓 **Ping System** - Automated ping signals
 - ⚡ **Multi-Threading Support** - Handle multiple accounts simultaneously
 
 ## 📋 Requirements
@@ -124,28 +124,6 @@ When starting the bot, you'll be prompted to choose:
 2. **Auto-Rotation:** 
    - `y`: Enable automatic invalid proxy rotation
    - `n`: Disable auto-rotation
-
-## 🌐 Proxy Recommendation
-
-<div align="left">
-  <img src="images/banner.png" alt="NST Proxy Banner" width="300">
-</div>
-
-For reliable multi-wallet automation and geo-restriction bypass, we recommend **Nstproxy**:
-
-### Why Nstproxy?
-- 💰 **Affordable pricing** starting from $0.1/GB
-- 🌍 **Global coverage** with multiple locations
-- 🔄 **Advanced rotation control**
-- 🛡️ **Anti-ban technology**
-
-### Get Started with Nstproxy
-- 🔗 **Website:** [Nstproxy.com](https://www.nstproxy.com/?utm_source=vonssy)
-- 💬 **Telegram:** [@nstproxy](https://t.me/nstproxy)
-- 🎮 **Discord:** [Join Server](https://discord.gg/5jjWCAmvng)
-- 📚 **GitHub:** [Nstproxy Repository](https://github.com/Nstproxy)
-
-> 🎁 **Special Offer:** Use code `VONSSY` for **10% OFF** your first purchase!
 
 ## 💖 Support the Project
 

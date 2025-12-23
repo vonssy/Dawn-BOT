@@ -1,9 +1,14 @@
-from aiohttp import ClientResponseError, ClientSession, ClientTimeout, BasicAuth
+from aiohttp import (
+    ClientResponseError, 
+    ClientSession, 
+    ClientTimeout, 
+    BasicAuth
+)
 from aiohttp_socks import ProxyConnector
 from fake_useragent import FakeUserAgent
 from datetime import datetime, timezone
 from colorama import *
-import asyncio, random, json, pytz, re, os
+import asyncio, json, pytz, re, os
 
 wib = pytz.timezone('Asia/Jakarta')
 
@@ -266,7 +271,7 @@ class Dawn:
                 
                 self.print_message(email, proxy, Fore.WHITE, f"Earning {total_points} PTS")
 
-            await asyncio.sleep(5 * 60) 
+            await asyncio.sleep(10 * 60) 
 
     async def process_send_keepalive(self, email: str, use_proxy: bool):
         while True:
@@ -282,8 +287,6 @@ class Dawn:
                 flush=True
             )
 
-            await asyncio.sleep(10 * 60)
-
             timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
             keepalive = await self.extension_ping(email, timestamp, proxy)
@@ -295,6 +298,8 @@ class Dawn:
                     f"{Fore.CYAN + Style.BRIGHT} Message: {Style.RESET_ALL}"
                     f"{Fore.BLUE + Style.BRIGHT}{message}{Style.RESET_ALL}"
                 )
+            
+            await asyncio.sleep(20 * 60)
         
     async def process_accounts(self, email: str, use_proxy: bool, rotate_proxy: bool):
         is_valid = await self.process_check_connection(email, use_proxy, rotate_proxy)
