@@ -5,7 +5,6 @@ from aiohttp import (
     BasicAuth
 )
 from aiohttp_socks import ProxyConnector
-from fake_useragent import FakeUserAgent
 from datetime import datetime, timezone
 from colorama import *
 import asyncio, json, pytz, re, os
@@ -19,8 +18,23 @@ class Dawn:
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
+        self.sessions = {}
+        self.ua_index = 0
         self.user_ids = {}
         self.session_tokens = {}
+        
+        self.USER_AGENTS = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 OPR/117.0.0.0"
+        ]
 
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -35,7 +49,7 @@ class Dawn:
     def welcome(self):
         print(
             f"""
-        {Fore.GREEN + Style.BRIGHT}Dawn {Fore.BLUE + Style.BRIGHT}Auto BOT
+        {Fore.GREEN + Style.BRIGHT}Dawn Validator {Fore.BLUE + Style.BRIGHT}Auto BOT
             """
             f"""
         {Fore.GREEN + Style.BRIGHT}Rey? {Fore.YELLOW + Style.BRIGHT}<INI WATERMARK>
@@ -59,10 +73,11 @@ class Dawn:
                 if isinstance(data, list):
                     return data
                 return []
-        except json.JSONDecodeError:
-            return []
+        except Exception as e:
+            print(f"{Fore.RED + Style.BRIGHT}Failed To Load Accounts: {e}{Style.RESET_ALL}")
+            return None
     
-    async def load_proxies(self):
+    def load_proxies(self):
         filename = "proxy.txt"
         try:
             if not os.path.exists(filename):
@@ -127,11 +142,61 @@ class Dawn:
 
         raise Exception("Unsupported Proxy Type.")
     
+    def display_proxy(self, proxy_url=None):
+        if not proxy_url: return "No Proxy"
+
+        proxy_url = re.sub(r"^(http|https|socks4|socks5)://", "", proxy_url)
+
+        if "@" in proxy_url:
+            proxy_url = proxy_url.split("@", 1)[1]
+
+        return proxy_url
+    
     def mask_account(self, account):
         if "@" in account:
             local, domain = account.split('@', 1)
             mask_account = local[:3] + '*' * 3 + local[-3:]
             return f"{mask_account}@{domain}"
+        
+    def get_next_user_agent(self):
+        ua = self.USER_AGENTS[self.ua_index]
+        self.ua_index = (self.ua_index + 1) % len(self.USER_AGENTS)
+        return ua
+
+    def initialize_headers(self, email: str):
+        if email not in self.HEADERS:
+            self.HEADERS[email] = {
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Cache-Control": "no-cache",
+                "Authorization": f"Bearer {self.session_tokens[email]}",
+                "Origin": "chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp",
+                "Pragma": "no-cache",
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "cross-site",
+                "User-Agent": self.get_next_user_agent()
+            }
+
+        return self.HEADERS[email].copy()
+    
+    def get_session(self, email: str, proxy_url=None, timeout=60):
+        if email not in self.sessions:
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
+            
+            session = ClientSession(
+                connector=connector,
+                timeout=ClientTimeout(total=timeout)
+            )
+            
+            self.sessions[email] = {
+                'session': session,
+                'proxy': proxy,
+                'proxy_auth': proxy_auth
+            }
+        
+        return self.sessions[email]
     
     def print_message(self, email, proxy, color, message):
         self.log(
@@ -159,123 +224,162 @@ class Dawn:
                         "Without"
                     )
                     print(f"{Fore.GREEN + Style.BRIGHT}Run {proxy_type} Proxy Selected.{Style.RESET_ALL}")
+                    self.USE_PROXY = True if proxy_choice == 1 else False
                     break
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}Please enter either 1  or 2.{Style.RESET_ALL}")
             except ValueError:
                 print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number (1  or 2).{Style.RESET_ALL}")
 
-        rotate_proxy = False
-        if proxy_choice == 1:
+        if self.USE_PROXY:
             while True:
                 rotate_proxy = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Style.RESET_ALL}").strip()
                 if rotate_proxy in ["y", "n"]:
-                    rotate_proxy = rotate_proxy == "y"
+                    self.ROTATE_PROXY = True if rotate_proxy == "y" else False
                     break
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter 'y' or 'n'.{Style.RESET_ALL}")
 
-        return proxy_choice, rotate_proxy
-
     async def check_connection(self, email: str, proxy_url=None):
-        connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
+        url = "https://api.ipify.org?format=json"
+        
         try:
-            async with ClientSession(connector=connector, timeout=ClientTimeout(total=10)) as session:
-                async with session.get(url="https://api.ipify.org?format=json", proxy=proxy, proxy_auth=proxy_auth) as response:
-                    response.raise_for_status()
-                    return True
-        except (Exception, ClientResponseError) as e:
-            self.print_message(email, proxy, Fore.RED, f"Connection Not 200 OK: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
-            return None
+            session_info = self.get_session(email, proxy_url, 15)
+            session = session_info["session"]
+            proxy = session_info["proxy"]
+            proxy_auth = session_info["proxy_auth"]
 
+            async with session.get(
+                url=url, proxy=proxy, proxy_auth=proxy_auth
+            ) as response:
+                response.raise_for_status()
+                return True
+        except (Exception, ClientResponseError) as e:
+            self.print_message(
+                email, 
+                self.display_proxy(proxy_url), 
+                Fore.RED, 
+                f"Connection Not 200 OK: {Fore.YELLOW+Style.BRIGHT}{str(e)}"
+            )
+            return None
+        
     async def user_point(self, email: str, proxy_url=None, retries=5):
-        url = f"{self.BASE_API}/point?user_id={self.user_ids[email]}"
-        headers = {
-            **self.HEADERS[email],
-            "Authorization": f"Bearer {self.session_tokens[email]}"
+        url = f"{self.BASE_API}/point"
+        headers = self.initialize_headers(email)
+        params = {
+            "user_id": self.user_ids[email]
         }
         
         for attempt in range(retries):
-            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
-                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.get(url=url, headers=headers, proxy=proxy, proxy_auth=proxy_auth) as response:
-                        if response.status == 401:
-                            self.print_message(email, proxy, Fore.RED, f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}Token Already Expired")
-                            return None
-                        response.raise_for_status()
-                        return await response.json()
+                session_info = self.get_session(email, proxy_url)
+                session = session_info["session"]
+                proxy = session_info["proxy"]
+                proxy_auth = session_info["proxy_auth"]
+
+                async with session.get(
+                    url=url, headers=headers, params=params, proxy=proxy, proxy_auth=proxy_auth
+                ) as response:
+                    if response.status == 401:
+                        self.print_message(email, proxy, Fore.RED, f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}Token Already Expired")
+                        return None
+                    response.raise_for_status()
+                    return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                self.print_message(email, proxy, Fore.RED, f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
+                self.print_message(
+                    email, 
+                    self.display_proxy(proxy_url), 
+                    Fore.RED, 
+                    f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}{str(e)}"
+                )
 
         return None
 
     async def extension_ping(self, email: str, timestamp: str, proxy_url=None, retries=5):
-        url = f"{self.BASE_API}/ping?role=extension"
-        data = json.dumps({
+        url = f"{self.BASE_API}/ping"
+        headers = self.initialize_headers(email)
+        headers["Content-Type"] = "application/json"
+        params = {
+            "role": "extension"
+        }
+        payload = {
             "user_id": self.user_ids[email], 
             "extension_id": "fpdkjdnhkakefebpekbdhillbhonfjjp", 
             "timestamp": timestamp
-        })
-        headers = {
-            **self.HEADERS[email],
-            "Authorization": f"Bearer {self.session_tokens[email]}",
-            "Content-Length": str(len(data)),
-            "Content-Type": "application/json"
         }
         for attempt in range(retries):
-            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
-                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
-                        if response.status == 401:
-                            self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Token Already Expired")
-                            return None
-                        elif response.status == 429:
-                            self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Too Many Request")
-                            return None
-                        response.raise_for_status()
-                        return await response.json()
+                session_info = self.get_session(email, proxy_url)
+                session = session_info["session"]
+                proxy = session_info["proxy"]
+                proxy_auth = session_info["proxy_auth"]
+
+                async with session.post(
+                    url=url, headers=headers, params=params, json=payload, proxy=proxy, proxy_auth=proxy_auth
+                ) as response:
+                        
+                    if response.status == 401:
+                        self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Token Already Expired")
+                        return None
+                    elif response.status == 429:
+                        self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Too Many Request")
+                        return None
+                    
+                    response.raise_for_status()
+                    return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}{str(e)}")
+                self.print_message(
+                    email, 
+                    self.display_proxy(proxy_url), 
+                    Fore.RED, 
+                    f"PING Failed: {Fore.YELLOW+Style.BRIGHT}{str(e)}"
+                )
 
         return None
 
-    async def process_check_connection(self, email: str, use_proxy: bool, rotate_proxy: bool):
+    async def process_check_connection(self, email: str, proxy_url=None):
         while True:
-            proxy = self.get_next_proxy_for_account(email) if use_proxy else None
+            if self.USE_PROXY:
+                proxy_url = self.get_next_proxy_for_account(email)
 
-            is_valid = await self.check_connection(email, proxy)
+            is_valid = await self.check_connection(email, proxy_url)
             if is_valid: return True
             
-            if rotate_proxy:
-                proxy = self.rotate_proxy_for_account(email)
+            if self.ROTATE_PROXY:
+                self.rotate_proxy_for_account(email)
                 
             await asyncio.sleep(1)
             
-    async def process_user_earning(self, email: str, use_proxy: bool):
+    async def process_user_earning(self, email: str, proxy_url=None):
         while True:
-            proxy = self.get_next_proxy_for_account(email) if use_proxy else None
+            if self.USE_PROXY:
+                proxy_url = self.get_next_proxy_for_account(email)
 
-            user = await self.user_point(email, proxy)
+            user = await self.user_point(email, proxy_url)
             if user:
                 node_points = user.get("points", 0)
                 referral_points = user.get("referral_points", 0)
                 total_points = node_points + referral_points
                 
-                self.print_message(email, proxy, Fore.WHITE, f"Earning {total_points} PTS")
+                self.print_message(
+                    email, 
+                    self.display_proxy(proxy_url), 
+                    Fore.WHITE, 
+                    f"Earning {total_points} PTS"
+                )
 
             await asyncio.sleep(10 * 60) 
 
-    async def process_send_keepalive(self, email: str, use_proxy: bool):
+    async def process_send_keepalive(self, email: str, proxy_url=None):
         while True:
-            proxy = self.get_next_proxy_for_account(email) if use_proxy else None
+            if self.USE_PROXY:
+                proxy_url = self.get_next_proxy_for_account(email)
 
             await asyncio.sleep(3)
 
@@ -289,11 +393,15 @@ class Dawn:
 
             timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
-            keepalive = await self.extension_ping(email, timestamp, proxy)
+            keepalive = await self.extension_ping(email, timestamp, proxy_url)
             if keepalive:
                 message = keepalive.get("message")
 
-                self.print_message(email, proxy, Fore.GREEN, "PING Success "
+                self.print_message(
+                    email, 
+                    self.display_proxy(proxy_url), 
+                    Fore.GREEN, 
+                    "PING Success "
                     f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
                     f"{Fore.CYAN + Style.BRIGHT} Message: {Style.RESET_ALL}"
                     f"{Fore.BLUE + Style.BRIGHT}{message}{Style.RESET_ALL}"
@@ -301,24 +409,21 @@ class Dawn:
             
             await asyncio.sleep(20 * 60)
         
-    async def process_accounts(self, email: str, use_proxy: bool, rotate_proxy: bool):
-        is_valid = await self.process_check_connection(email, use_proxy, rotate_proxy)
+    async def process_accounts(self, email: str):
+        is_valid = await self.process_check_connection(email)
         if is_valid:
             tasks = [
-                asyncio.create_task(self.process_user_earning(email, use_proxy)),
-                asyncio.create_task(self.process_send_keepalive(email, use_proxy))
+                asyncio.create_task(self.process_user_earning(email)),
+                asyncio.create_task(self.process_send_keepalive(email))
             ]
             await asyncio.gather(*tasks)
     
     async def main(self):
         try:
             accounts = self.load_accounts()
-            if not accounts:
-                self.log(f"{Fore.RED + Style.BRIGHT}No Accounts Loaded.{Style.RESET_ALL}")
-                return
+            if not accounts: return
             
-            proxy_choice, rotate_proxy = self.print_question()
-
+            self.print_question()
             self.clear_terminal()
             self.welcome()
             self.log(
@@ -326,50 +431,41 @@ class Dawn:
                 f"{Fore.WHITE + Style.BRIGHT}{len(accounts)}{Style.RESET_ALL}"
             )
 
-            use_proxy = True if proxy_choice == 1 else False
-            if use_proxy:
-                await self.load_proxies()
+            if self.USE_PROXY: self.load_proxies()
 
             self.log(f"{Fore.CYAN + Style.BRIGHT}={Style.RESET_ALL}"*75)
 
             tasks = []
             for idx, account in enumerate(accounts, start=1):
-                if account:
-                    email = account["email"]
-                    user_id = account["userId"]
-                    session_token = account["sessionToken"]
+                email = account["email"]
+                user_id = account["userId"]
+                session_token = account["sessionToken"]
 
-                    if not "@" in email or not user_id or not session_token:
-                        self.log(
-                            f"{Fore.CYAN + Style.BRIGHT}[ Account: {Style.RESET_ALL}"
-                            f"{Fore.WHITE + Style.BRIGHT}{idx}{Style.RESET_ALL}"
-                            f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
-                            f"{Fore.CYAN + Style.BRIGHT}Status:{Style.RESET_ALL}"
-                            f"{Fore.RED + Style.BRIGHT} Invalid Account Data {Style.RESET_ALL}"
-                            f"{Fore.CYAN + Style.BRIGHT}]{Style.RESET_ALL}"
-                        )
-                        continue
+                if not "@" in email or not user_id or not session_token:
+                    self.log(
+                        f"{Fore.CYAN + Style.BRIGHT}[ Account: {Style.RESET_ALL}"
+                        f"{Fore.WHITE + Style.BRIGHT}{idx}{Style.RESET_ALL}"
+                        f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
+                        f"{Fore.CYAN + Style.BRIGHT}Status:{Style.RESET_ALL}"
+                        f"{Fore.RED + Style.BRIGHT} Invalid Account Data {Style.RESET_ALL}"
+                        f"{Fore.CYAN + Style.BRIGHT}]{Style.RESET_ALL}"
+                    )
+                    continue
 
-                    self.HEADERS[email] = {
-                        "Accept": "*/*",
-                        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-                        "Origin": "chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp",
-                        "Sec-Fetch-Dest": "empty",
-                        "Sec-Fetch-Mode": "cors",
-                        "Sec-Fetch-Site": "cross-site",
-                        "User-Agent": FakeUserAgent().random
-                    }
+                self.user_ids[email] = user_id
+                self.session_tokens[email] = session_token
 
-                    self.user_ids[email] = user_id
-                    self.session_tokens[email] = session_token
-
-                    tasks.append(asyncio.create_task(self.process_accounts(email, use_proxy, rotate_proxy)))
+                tasks.append(asyncio.create_task(self.process_accounts(email)))
 
             await asyncio.gather(*tasks)
 
         except Exception as e:
             self.log(f"{Fore.RED+Style.BRIGHT}Error: {e}{Style.RESET_ALL}")
             raise e
+        finally:
+            for s in self.sessions.values():
+                if not s["session"].closed:
+                    await s["session"].close()
 
 if __name__ == "__main__":
     try:
@@ -379,5 +475,5 @@ if __name__ == "__main__":
         print(
             f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
             f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-            f"{Fore.RED + Style.BRIGHT}[ EXIT ] Dawn - BOT{Style.RESET_ALL}                                      ",                                       
+            f"{Fore.RED + Style.BRIGHT}[ EXIT ] Dawn Validator - BOT{Style.RESET_ALL}                                      ",                                       
         )

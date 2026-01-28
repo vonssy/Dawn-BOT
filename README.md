@@ -41,6 +41,7 @@ Dawn Validator BOT is an automated tool designed to manage Dawn Validator nodes 
 
 - **Python:** Version 3.9 or higher
 - **pip:** Latest version recommended
+- **2captcha key:** for bypass captcha turnstile
 
 ## 🛠 Installation
 
@@ -68,6 +69,14 @@ Create or edit `emails.txt` in the project directory:
 ```
 your_email_address_1
 your_email_address_2
+```
+
+### Captcha Key Configuration
+
+Create or edit `captcha_key.txt` in the project directory:
+
+```
+your_2captcha_key
 ```
 
 ### Proxy Configuration (Optional)

@@ -5,23 +5,43 @@ from aiohttp import (
     BasicAuth
 )
 from aiohttp_socks import ProxyConnector
-from fake_useragent import FakeUserAgent
 from datetime import datetime
 from colorama import *
-import asyncio, uuid, json, pytz, re, os
+import asyncio, random, uuid, json, pytz, re, os
 
 wib = pytz.timezone('Asia/Jakarta')
 
 class Dawn:
     def __init__(self) -> None:
-        self.BASE_API = "https://api.dawninternet.com"
-        self.PRIVY_API = "https://auth.privy.io/api/v1"
+        self.API_URL = {
+            "dawn": "https://api.dawninternet.com",
+            "privy": "https://auth.privy.io",
+        }
+        self.CAPTCHA = {
+            "solver_api": "https://api.2captcha.com",
+            "site_key": "0x4AAAAAAAM8ceq5KhP1uJBt",
+            "page_url": "https://dashboard.dawninternet.com"
+        }
         self.REF_CODE = "02lt4r" # U can change it with yours
-        self.BASE_HEADERS = {}
-        self.PRIVY_HEADERS = {}
+        self.HEADERS = {}
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
+        self.sessions = {}
+        self.ua_index = 0
+        
+        self.USER_AGENTS = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 OPR/117.0.0.0"
+        ]
 
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -64,7 +84,7 @@ class Dawn:
     def welcome(self):
         print(
             f"""
-        {Fore.GREEN + Style.BRIGHT}Dawn {Fore.BLUE + Style.BRIGHT}Auto BOT
+        {Fore.GREEN + Style.BRIGHT}Dawn Validator {Fore.BLUE + Style.BRIGHT}Auto BOT
             """
             f"""
         {Fore.GREEN + Style.BRIGHT}Rey? {Fore.YELLOW + Style.BRIGHT}<INI WATERMARK>
@@ -101,7 +121,27 @@ class Dawn:
             self.log_status("Save Tokens", "failed", error=e)
             return []
         
-    async def load_proxies(self):
+    def load_emails(self):
+        filename = "emails.txt"
+        try:
+            with open(filename, 'r') as file:
+                emails = [line.strip() for line in file if line.strip()]
+            return emails
+        except Exception as e:
+            print(f"{Fore.RED + Style.BRIGHT}Failed To Load Emails: {e}{Style.RESET_ALL}")
+            return None
+        
+    def load_captcha_key(self):
+        filename = "captcha_key.txt"
+        try:
+            with open(filename, 'r') as file:
+                captcha_key = file.readline().strip()
+            return captcha_key
+        except Exception as e:
+            print(f"{Fore.RED + Style.BRIGHT}Failed To Load Captcha Key: {e}{Style.RESET_ALL}")
+            return None
+
+    def load_proxies(self):
         filename = "proxy.txt"
         try:
             if not os.path.exists(filename):
@@ -166,11 +206,86 @@ class Dawn:
 
         raise Exception("Unsupported Proxy Type.")
     
+    def display_proxy(self, proxy_url=None):
+        if not proxy_url: return "No Proxy"
+
+        proxy_url = re.sub(r"^(http|https|socks4|socks5)://", "", proxy_url)
+
+        if "@" in proxy_url:
+            proxy_url = proxy_url.split("@", 1)[1]
+
+        return proxy_url
+    
     def mask_account(self, account):
         if "@" in account:
             local, domain = account.split('@', 1)
             mask_account = local[:3] + '*' * 3 + local[-3:]
             return f"{mask_account}@{domain}"
+        
+    def get_next_user_agent(self):
+        ua = self.USER_AGENTS[self.ua_index]
+        self.ua_index = (self.ua_index + 1) % len(self.USER_AGENTS)
+        return ua
+
+    def initialize_headers(self, email: str, header_type: str):
+        if email not in self.HEADERS:
+            self.HEADERS[email] = {}
+
+        if "ua" not in self.HEADERS[email]:
+            self.HEADERS[email]["ua"] = self.get_next_user_agent()
+
+        ua = self.HEADERS[email]["ua"]
+
+        if header_type not in self.HEADERS[email]:
+
+            base_headers = {
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Cache-Control": "no-cache",
+                "Origin": "chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp",
+                "Pragma": "no-cache",
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "User-Agent": ua
+            }
+
+            if header_type == "privy":
+                headers = {
+                    **base_headers,
+                    "Accept": "application/json",
+                    "Privy-App-Id": "cmfb724md0057la0bs4tg0vf1",
+                    "Privy-Ca-Id": str(uuid.uuid4()),
+                    "Privy-Client": "react-auth:3.10.0-beta-20251223041507",
+                    "Sec-Fetch-Site": "none",
+                }
+
+            elif header_type == "dawn":
+                headers = {
+                    **base_headers,
+                    "Accept": "application/json, text/plain, */*",
+                    "Sec-Fetch-Site": "cross-site",
+                }
+
+            self.HEADERS[email][header_type] = headers
+
+        return self.HEADERS[email][header_type].copy()
+    
+    def get_session(self, email: str, proxy_url=None, timeout=60):
+        if email not in self.sessions:
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
+            
+            session = ClientSession(
+                connector=connector,
+                timeout=ClientTimeout(total=timeout)
+            )
+            
+            self.sessions[email] = {
+                'session': session,
+                'proxy': proxy,
+                'proxy_auth': proxy_auth
+            }
+        
+        return self.sessions[email]
 
     def print_question(self):
         while True:
@@ -185,54 +300,130 @@ class Dawn:
                         "Without"
                     )
                     print(f"{Fore.GREEN + Style.BRIGHT}Run {proxy_type} Proxy Selected.{Style.RESET_ALL}")
+                    self.USE_PROXY = True if proxy_choice == 1 else False
                     break
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}Please enter either 1  or 2.{Style.RESET_ALL}")
             except ValueError:
                 print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number (1  or 2).{Style.RESET_ALL}")
 
-        rotate_proxy = False
-        if proxy_choice == 1:
+        if self.USE_PROXY:
             while True:
                 rotate_proxy = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Style.RESET_ALL}").strip()
                 if rotate_proxy in ["y", "n"]:
-                    rotate_proxy = rotate_proxy == "y"
+                    self.ROTATE_PROXY = True if rotate_proxy == "y" else False
                     break
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter 'y' or 'n'.{Style.RESET_ALL}")
-
-        return proxy_choice, rotate_proxy
     
-    async def check_connection(self, proxy_url=None):
-        connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
+    async def check_connection(self, email: str, proxy_url=None):
+        url = "https://api.ipify.org?format=json"
+        
         try:
-            async with ClientSession(connector=connector, timeout=ClientTimeout(total=10)) as session:
-                async with session.get(url="https://api.ipify.org?format=json", proxy=proxy, proxy_auth=proxy_auth) as response:
-                    response.raise_for_status()
-                    self.log_status("Check Connection", "success", "Connection OK")
-                    return True
+            session_info = self.get_session(email, proxy_url, 15)
+            session = session_info["session"]
+            proxy = session_info["proxy"]
+            proxy_auth = session_info["proxy_auth"]
+
+            async with session.get(
+                url=url, proxy=proxy, proxy_auth=proxy_auth
+            ) as response:
+                response.raise_for_status()
+                self.log_status("Check Connection", "success", "Connection OK")
+                return True
         except (Exception, ClientResponseError) as e:
             self.log_status("Check Connection", "failed", error=e)
             return None
         
-    async def request_otp(self, email: str, proxy_url=None, retries=5):
-        url = f"{self.PRIVY_API}/passwordless/init"
-        data = json.dumps({"email": email})
-        headers = {
-            **self.PRIVY_HEADERS[email],
-            "Content-Length": str(len(data)),
-            "Content-Type": "application/json"
+    async def solve_turnstile(self, email: str, proxy_url=None, max_attempts: int = 30):
+        try:
+            session_info = self.get_session(email, proxy_url)
+            session = session_info["session"]
+            proxy = session_info["proxy"]
+            proxy_auth = session_info["proxy_auth"]
+
+            create_url = f"{self.CAPTCHA['solver_api']}/createTask"
+            create_payload = {
+                "clientKey": self.captcha_key,
+                "task": {
+                    "type": "TurnstileTaskProxyless",
+                    "websiteURL": self.CAPTCHA["page_url"],
+                    "websiteKey": self.CAPTCHA["site_key"],
+                }
+            }
+
+            async with session.post(
+                url=create_url, json=create_payload, proxy=proxy, proxy_auth=proxy_auth
+            ) as r1:
+                r1.raise_for_status()
+                res_text1 = await r1.text()
+
+                res_json1 = json.loads(res_text1)
+                if res_json1.get("errorId") != 0:
+                    self.log_status("Captcha", "failed", error={res_json1.get('errorDescription')})
+                    return None
+
+                task_id = res_json1.get("taskId")
+                self.log_status("Captcha", "success", f"Task Id: {task_id}")
+
+                result_url = f"{self.CAPTCHA['solver_api']}/getTaskResult"
+                result_payload = {
+                    "clientKey": self.captcha_key,
+                    "taskId": task_id
+                }
+
+                for attempt in range(max_attempts):
+                    await asyncio.sleep(3)
+
+                    async with session.post(
+                        url=result_url, json=result_payload, proxy=proxy, proxy_auth=proxy_auth
+                    ) as r2:
+                        r2.raise_for_status()
+                        res_text2 = await r2.text()
+
+                        res_json2 = json.loads(res_text2)
+                        if res_json2.get("errorId") != 0:
+                            self.log_status("Captcha", "failed", error={res_json2.get('errorDescription')})
+                            return None
+
+                        status = res_json2.get("status")
+                        if status == "ready":
+                            turnstile_token = res_json2.get("solution", {}).get("token")
+                            self.log_status("Captcha", "success", "Turnstile token obtained")
+                            return turnstile_token
+                        if status == "processing":
+                            self.log_status("Captcha", "retry", f"Attempt {attempt + 1}/{max_attempts}")
+                            continue
+
+            self.log_status("Captcha", "failed", "Timeout")
+            return None
+
+        except Exception as e:
+            self.log_status("Captcha", "failed", error=e)
+            return None
+        
+    async def request_otp(self, email: str, turnstile_token: str, proxy_url=None, retries=5):
+        url = f"{self.API_URL['privy']}/api/v1/passwordless/init"
+        headers = self.initialize_headers(email, "privy")
+        headers["Content-Type"] = "application/json"
+        payload = {
+            "email": email,
+            "token": turnstile_token,
         }
         
         for attempt in range(retries):
-            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
-                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
-                        response.raise_for_status()
-                        result = await response.json()
-                        self.log_status("Request OTP", "success", "OTP request sent")
-                        return result
+                session_info = self.get_session(email, proxy_url)
+                session = session_info["session"]
+                proxy = session_info["proxy"]
+                proxy_auth = session_info["proxy_auth"]
+
+                async with session.post(
+                    url=url, headers=headers, json=payload, proxy=proxy, proxy_auth=proxy_auth
+                ) as response:
+                    response.raise_for_status()
+                    self.log_status("Request OTP", "success", "OTP request sent")
+                    return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     self.log_status("Request OTP", "retry", f"Attempt {attempt + 1}/{retries}")
@@ -243,23 +434,28 @@ class Dawn:
                     return None
         
     async def authenticate_otp(self, email: str, otp_code: str, proxy_url=None, retries=5):
-        url = f"{self.PRIVY_API}/passwordless/authenticate"
-        data = json.dumps({"email": email, "code": otp_code, "mode": "login-or-sign-up"})
-        headers = {
-            **self.PRIVY_HEADERS[email],
-            "Content-Length": str(len(data)),
-            "Content-Type": "application/json"
+        url = f"{self.API_URL['privy']}/api/v1/passwordless/authenticate"
+        headers = self.initialize_headers(email, "privy")
+        headers["Content-Type"] = "application/json"
+        payload = {
+            "email": email,
+            "code": otp_code,
+            "mode": "login-or-sign-up"
         }
         
         for attempt in range(retries):
-            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
-                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
-                        response.raise_for_status()
-                        result = await response.json()
-                        self.log_status("Authenticate OTP", "success", "OTP verified successfully")
-                        return result
+                session_info = self.get_session(email, proxy_url)
+                session = session_info["session"]
+                proxy = session_info["proxy"]
+                proxy_auth = session_info["proxy_auth"]
+
+                async with session.post(
+                    url=url, headers=headers, json=payload, proxy=proxy, proxy_auth=proxy_auth
+                ) as response:
+                    response.raise_for_status()
+                    self.log_status("Authenticate OTP", "success", "OTP verified successfully")
+                    return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     self.log_status("Authenticate OTP", "retry", f"Attempt {attempt + 1}/{retries}")
@@ -270,21 +466,27 @@ class Dawn:
                     return None
         
     async def auth_jwt(self, email: str, privy_token: str, proxy_url=None, retries=5):
-        url = f"{self.BASE_API}/auth?jwt=true&role=extension"
-        headers = {
-            **self.BASE_HEADERS[email],
-            "X-Privy-Token": privy_token
+        url = f"{self.API_URL['dawn']}/auth"
+        headers = self.initialize_headers(email, "dawn")
+        headers["X-Privy-Token"] = privy_token
+        params = {
+            "jwt": "true",
+            "role": "extension"
         }
         
         for attempt in range(retries):
-            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
-                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.get(url=url, headers=headers, proxy=proxy, proxy_auth=proxy_auth) as response:
-                        response.raise_for_status()
-                        result = await response.json()
-                        self.log_status("JWT Authentication", "success", "JWT token obtained")
-                        return result
+                session_info = self.get_session(email, proxy_url)
+                session = session_info["session"]
+                proxy = session_info["proxy"]
+                proxy_auth = session_info["proxy_auth"]
+
+                async with session.get(
+                    url=url, headers=headers, params=params, proxy=proxy, proxy_auth=proxy_auth
+                ) as response:
+                    response.raise_for_status()
+                    self.log_status("JWT Authentication", "success", "JWT token obtained")
+                    return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     self.log_status("JWT Authentication", "retry", f"Attempt {attempt + 1}/{retries}")
@@ -295,24 +497,27 @@ class Dawn:
                     return None
         
     async def use_referral(self, email: str, session_token: str, proxy_url=None, retries=5):
-        url = f"{self.BASE_API}/referral/use"
-        data = json.dumps({"referralCode":self.REF_CODE})
-        headers = {
-            **self.BASE_HEADERS[email],
-            "Authorization": f"Bearer {session_token}",
-            "Content-Length": str(len(data)),
-            "Content-Type": "application/json"
+        url = f"{self.API_URL['dawn']}/referral/use"
+        headers = self.initialize_headers(email, "dawn")
+        headers["Authorization"] = f"Bearer {session_token}"
+        headers["Content-Type"] = "application/json"
+        payload = {
+            "referralCode": self.REF_CODE
         }
         
         for attempt in range(retries):
-            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
-                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
-                        if response.status == 400: return None
-                        response.raise_for_status()
-                        result = await response.json()
-                        return result
+                session_info = self.get_session(email, proxy_url)
+                session = session_info["session"]
+                proxy = session_info["proxy"]
+                proxy_auth = session_info["proxy_auth"]
+
+                async with session.post(
+                    url=url, headers=headers, json=payload, proxy=proxy, proxy_auth=proxy_auth
+                ) as response:
+                    if response.status == 400: return None
+                    response.raise_for_status()
+                    return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
@@ -320,33 +525,39 @@ class Dawn:
                 else:
                     return None
 
-    async def process_check_connection(self, email: str, use_proxy: bool, rotate_proxy: bool):
+    async def process_check_connection(self, email: str):
         while True:
-            proxy = self.get_next_proxy_for_account(email) if use_proxy else None
+            proxy_url = self.get_next_proxy_for_account(email) if self.USE_PROXY else None
+
+            formatted_proxy = self.display_proxy(proxy_url)
+
             self.log(
                 f"{Fore.CYAN+Style.BRIGHT}Proxy  :{Style.RESET_ALL}"
-                f"{Fore.WHITE+Style.BRIGHT} {proxy if proxy else 'No Proxy'} {Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {formatted_proxy} {Style.RESET_ALL}"
             )
 
-            is_valid = await self.check_connection(proxy)
+            is_valid = await self.check_connection(email, proxy_url)
             if is_valid: return True
             
-            if rotate_proxy:
-                proxy = self.rotate_proxy_for_account(email)
+            if self.ROTATE_PROXY:
+                self.rotate_proxy_for_account(email)
                 await asyncio.sleep(1)
                 continue
 
             return False
 
-    async def process_accounts(self, email: str, use_proxy: bool, rotate_proxy: bool):
-        is_valid = await self.process_check_connection(email, use_proxy, rotate_proxy)
+    async def process_accounts(self, email: str):
+        is_valid = await self.process_check_connection(email)
         if not is_valid:
             self.log_status("Process Account", "failed", error="Connection check failed")
             return
 
-        proxy = self.get_next_proxy_for_account(email) if use_proxy else None
+        proxy_url = self.get_next_proxy_for_account(email) if self.USE_PROXY else None
 
-        request = await self.request_otp(email, proxy)
+        turnstile_token = await self.solve_turnstile(email)
+        if not turnstile_token: return
+
+        request = await self.request_otp(email, turnstile_token, proxy_url)
         if not request: return
 
         timestamp = (
@@ -356,7 +567,7 @@ class Dawn:
         )
         otp_code = input(f"{timestamp}{Fore.BLUE + Style.BRIGHT} Enter OTP Code -> {Style.RESET_ALL}")
 
-        authenticate = await self.authenticate_otp(email, otp_code, proxy)
+        authenticate = await self.authenticate_otp(email, otp_code, proxy_url)
         if not authenticate: return
 
         privy_token = authenticate.get("token")
@@ -364,14 +575,14 @@ class Dawn:
             self.log_status("Process Account", "failed", error="No token received from authentication")
             return
 
-        auth_jwt = await self.auth_jwt(email, privy_token, proxy)
+        auth_jwt = await self.auth_jwt(email, privy_token, proxy_url)
         if not auth_jwt: return
 
         user_id = auth_jwt.get("user", {}).get("id")
         session_token = auth_jwt.get("session_token")
 
         if user_id and session_token:
-            await self.use_referral(email, session_token, proxy)
+            await self.use_referral(email, session_token, proxy_url)
             account_data = [{"email": email, "userId": user_id, "sessionToken": session_token}]
             self.save_tokens(account_data)
             self.log_status("Process Account", "success", f"Account {self.mask_account(email)} processed successfully")
@@ -380,17 +591,17 @@ class Dawn:
     
     async def main(self):
         try:
-            with open('emails.txt', 'r') as file:
-                emails = [line.strip() for line in file if line.strip()]
+            emails = self.load_emails()
+            if not emails: return
 
-            proxy_choice, rotate_proxy = self.print_question()
+            self.captcha_key = self.load_captcha_key()
+            if not self.captcha_key: return
 
+            self.print_question()
             self.clear_terminal()
             self.welcome()
 
-            use_proxy = True if proxy_choice == 1 else False
-            if use_proxy:
-                await self.load_proxies()
+            if self.USE_PROXY: self.load_proxies()
 
             separator = "=" * 27
             for idx, email in enumerate(emails, start=1):
@@ -406,40 +617,13 @@ class Dawn:
                     f"{Fore.CYAN + Style.BRIGHT}]{separator}{Style.RESET_ALL}"
                 )
 
-                user_agent = FakeUserAgent().random
-
-                self.BASE_HEADERS[email] = {
-                    "Accept": "*/*",
-                    "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Origin": "chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp",
-                    "Sec-Fetch-Dest": "empty",
-                    "Sec-Fetch-Mode": "cors",
-                    "Sec-Fetch-Site": "cross-site",
-                    "User-Agent": user_agent
-                }
-
-                self.PRIVY_HEADERS[email] = {
-                    "Accept": "application/json",
-                    "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Origin": "chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp",
-                    "Privy-App-Id": "cmfb724md0057la0bs4tg0vf1",
-                    "Privy-Ca-Id": str(uuid.uuid4()),
-                    "Privy-Client": "react-auth:2.24.0",
-                    "Privy-Ui": "t",
-                    "Sec-Fetch-Dest": "empty",
-                    "Sec-Fetch-Mode": "cors",
-                    "Sec-Fetch-Site": "none",
-                    "Sec-Fetch-Storage-Access": "active",
-                    "User-Agent": user_agent
-                }
-
                 self.log(
                     f"{Fore.CYAN+Style.BRIGHT}Email  :{Style.RESET_ALL}"
                     f"{Fore.WHITE+Style.BRIGHT} {self.mask_account(email)} {Style.RESET_ALL}"
                 )
 
-                await self.process_accounts(email, use_proxy, rotate_proxy)
-                await asyncio.sleep(3)
+                await self.process_accounts(email)
+                await asyncio.sleep(random.uniform(2.0, 3.0))
 
         except FileNotFoundError:
             self.log_status("File Loading", "failed", error="File 'emails.txt' not found")
@@ -447,6 +631,10 @@ class Dawn:
         except Exception as e:
             self.log_status("Main Process", "failed", error=e)
             raise e
+        finally:
+            for s in self.sessions.values():
+                if not s["session"].closed:
+                    await s["session"].close()
 
 if __name__ == "__main__":
     try:
@@ -456,5 +644,5 @@ if __name__ == "__main__":
         print(
             f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
             f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-            f"{Fore.RED + Style.BRIGHT}[ EXIT ] Dawn - BOT{Style.RESET_ALL}                                      ",                                       
+            f"{Fore.RED + Style.BRIGHT}[ EXIT ] Dawn Validator - BOT{Style.RESET_ALL}                                      ",                                       
         )
