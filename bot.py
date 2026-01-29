@@ -20,8 +20,7 @@ class Dawn:
         self.account_proxies = {}
         self.sessions = {}
         self.ua_index = 0
-        self.user_ids = {}
-        self.session_tokens = {}
+        self.accounts = {}
         
         self.USER_AGENTS = [
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -49,7 +48,7 @@ class Dawn:
     def welcome(self):
         print(
             f"""
-        {Fore.GREEN + Style.BRIGHT}Dawn Validator {Fore.BLUE + Style.BRIGHT}Auto BOT
+        {Fore.GREEN + Style.BRIGHT}Dawn {Fore.BLUE + Style.BRIGHT}Auto BOT
             """
             f"""
         {Fore.GREEN + Style.BRIGHT}Rey? {Fore.YELLOW + Style.BRIGHT}<INI WATERMARK>
@@ -170,7 +169,7 @@ class Dawn:
                 "Accept-Encoding": "gzip, deflate, br",
                 "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Cache-Control": "no-cache",
-                "Authorization": f"Bearer {self.session_tokens[email]}",
+                "Authorization": f"Bearer {self.accounts[email]['session_token']}",
                 "Origin": "chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp",
                 "Pragma": "no-cache",
                 "Sec-Fetch-Dest": "empty",
@@ -197,6 +196,15 @@ class Dawn:
             }
         
         return self.sessions[email]
+    
+    async def recreate_session_with_new_proxy(self, email: str, proxy_url: str):
+        if email in self.sessions:
+            old_session = self.sessions[email]["session"]
+            if not old_session.closed:
+                await old_session.close()
+            del self.sessions[email]
+
+        return self.get_session(email, proxy_url)
     
     def print_message(self, email, proxy, color, message):
         self.log(
@@ -267,7 +275,7 @@ class Dawn:
         url = f"{self.BASE_API}/point"
         headers = self.initialize_headers(email)
         params = {
-            "user_id": self.user_ids[email]
+            "user_id": self.accounts[email]["user_id"]
         }
         
         for attempt in range(retries):
@@ -306,7 +314,7 @@ class Dawn:
             "role": "extension"
         }
         payload = {
-            "user_id": self.user_ids[email], 
+            "user_id": self.accounts[email]["user_id"], 
             "extension_id": "fpdkjdnhkakefebpekbdhillbhonfjjp", 
             "timestamp": timestamp
         }
@@ -352,7 +360,8 @@ class Dawn:
             if is_valid: return True
             
             if self.ROTATE_PROXY:
-                self.rotate_proxy_for_account(email)
+                proxy_url = self.rotate_proxy_for_account(email)
+                await self.recreate_session_with_new_proxy(email, proxy_url)
                 
             await asyncio.sleep(1)
             
@@ -383,14 +392,6 @@ class Dawn:
 
             await asyncio.sleep(3)
 
-            print(
-                f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
-                f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-                f"{Fore.BLUE + Style.BRIGHT}Wait For 10 Minutes For Sent Ping...{Style.RESET_ALL}",
-                end="\r",
-                flush=True
-            )
-
             timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
             keepalive = await self.extension_ping(email, timestamp, proxy_url)
@@ -406,6 +407,14 @@ class Dawn:
                     f"{Fore.CYAN + Style.BRIGHT} Message: {Style.RESET_ALL}"
                     f"{Fore.BLUE + Style.BRIGHT}{message}{Style.RESET_ALL}"
                 )
+
+            print(
+                f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
+                f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
+                f"{Fore.BLUE + Style.BRIGHT}Wait For 20 Minutes For Next Sent Ping...{Style.RESET_ALL}",
+                end="\r",
+                flush=True
+            )
             
             await asyncio.sleep(20 * 60)
         
@@ -437,11 +446,12 @@ class Dawn:
 
             tasks = []
             for idx, account in enumerate(accounts, start=1):
-                email = account["email"]
-                user_id = account["userId"]
-                session_token = account["sessionToken"]
+                email = account.get("email")
+                user_id = account.get("userId")
+                privy_token = account.get("privyToken")
+                session_token = account.get("sessionToken")
 
-                if not "@" in email or not user_id or not session_token:
+                if not "@" in email or not user_id or not privy_token or not session_token:
                     self.log(
                         f"{Fore.CYAN + Style.BRIGHT}[ Account: {Style.RESET_ALL}"
                         f"{Fore.WHITE + Style.BRIGHT}{idx}{Style.RESET_ALL}"
@@ -452,8 +462,11 @@ class Dawn:
                     )
                     continue
 
-                self.user_ids[email] = user_id
-                self.session_tokens[email] = session_token
+                self.accounts[email] = {
+                    "user_id": user_id,
+                    "privy_token": privy_token,
+                    "session_token": session_token,
+                }
 
                 tasks.append(asyncio.create_task(self.process_accounts(email)))
 
@@ -475,5 +488,5 @@ if __name__ == "__main__":
         print(
             f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
             f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-            f"{Fore.RED + Style.BRIGHT}[ EXIT ] Dawn Validator - BOT{Style.RESET_ALL}                                      ",                                       
+            f"{Fore.RED + Style.BRIGHT}[ EXIT ] Dawn - BOT{Style.RESET_ALL}                                      ",                                       
         )

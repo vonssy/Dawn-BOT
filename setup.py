@@ -22,7 +22,6 @@ class Dawn:
             "site_key": "0x4AAAAAAAM8ceq5KhP1uJBt",
             "page_url": "https://dashboard.dawninternet.com"
         }
-        self.REF_CODE = "02lt4r" # U can change it with yours
         self.HEADERS = {}
         self.proxies = []
         self.proxy_index = 0
@@ -84,7 +83,7 @@ class Dawn:
     def welcome(self):
         print(
             f"""
-        {Fore.GREEN + Style.BRIGHT}Dawn Validator {Fore.BLUE + Style.BRIGHT}Auto BOT
+        {Fore.GREEN + Style.BRIGHT}Dawn {Fore.BLUE + Style.BRIGHT}Auto BOT
             """
             f"""
         {Fore.GREEN + Style.BRIGHT}Rey? {Fore.YELLOW + Style.BRIGHT}<INI WATERMARK>
@@ -286,6 +285,15 @@ class Dawn:
             }
         
         return self.sessions[email]
+    
+    async def recreate_session_with_new_proxy(self, email: str, proxy_url: str):
+        if email in self.sessions:
+            old_session = self.sessions[email]["session"]
+            if not old_session.closed:
+                await old_session.close()
+            del self.sessions[email]
+
+        return self.get_session(email, proxy_url)
 
     def print_question(self):
         while True:
@@ -496,63 +504,32 @@ class Dawn:
                     self.log_status("JWT Authentication", "failed", error=e)
                     return None
         
-    async def use_referral(self, email: str, session_token: str, proxy_url=None, retries=5):
-        url = f"{self.API_URL['dawn']}/referral/use"
-        headers = self.initialize_headers(email, "dawn")
-        headers["Authorization"] = f"Bearer {session_token}"
-        headers["Content-Type"] = "application/json"
-        payload = {
-            "referralCode": self.REF_CODE
-        }
-        
-        for attempt in range(retries):
-            try:
-                session_info = self.get_session(email, proxy_url)
-                session = session_info["session"]
-                proxy = session_info["proxy"]
-                proxy_auth = session_info["proxy_auth"]
-
-                async with session.post(
-                    url=url, headers=headers, json=payload, proxy=proxy, proxy_auth=proxy_auth
-                ) as response:
-                    if response.status == 400: return None
-                    response.raise_for_status()
-                    return await response.json()
-            except (Exception, ClientResponseError) as e:
-                if attempt < retries - 1:
-                    await asyncio.sleep(5)
-                    continue
-                else:
-                    return None
-
-    async def process_check_connection(self, email: str):
+    async def process_check_connection(self, email: str, proxy_url=None):
         while True:
-            proxy_url = self.get_next_proxy_for_account(email) if self.USE_PROXY else None
-
-            formatted_proxy = self.display_proxy(proxy_url)
-
             self.log(
                 f"{Fore.CYAN+Style.BRIGHT}Proxy  :{Style.RESET_ALL}"
-                f"{Fore.WHITE+Style.BRIGHT} {formatted_proxy} {Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {self.display_proxy(proxy_url)} {Style.RESET_ALL}"
             )
 
             is_valid = await self.check_connection(email, proxy_url)
             if is_valid: return True
             
             if self.ROTATE_PROXY:
-                self.rotate_proxy_for_account(email)
+                proxy_url = self.rotate_proxy_for_account(email)
+                await self.recreate_session_with_new_proxy(email, proxy_url)
                 await asyncio.sleep(1)
                 continue
 
             return False
 
-    async def process_accounts(self, email: str):
-        is_valid = await self.process_check_connection(email)
+    async def process_accounts(self, email: str, proxy_url=None):
+        if self.USE_PROXY:
+            proxy_url = self.get_next_proxy_for_account(email)
+
+        is_valid = await self.process_check_connection(email, proxy_url)
         if not is_valid:
             self.log_status("Process Account", "failed", error="Connection check failed")
             return
-
-        proxy_url = self.get_next_proxy_for_account(email) if self.USE_PROXY else None
 
         turnstile_token = await self.solve_turnstile(email)
         if not turnstile_token: return
@@ -582,9 +559,13 @@ class Dawn:
         session_token = auth_jwt.get("session_token")
 
         if user_id and session_token:
-            await self.use_referral(email, session_token, proxy_url)
-            account_data = [{"email": email, "userId": user_id, "sessionToken": session_token}]
-            self.save_tokens(account_data)
+            self.save_tokens([{
+                "email": email, 
+                "userId": user_id, 
+                "privyToken": privy_token, 
+                "sessionToken": session_token
+            }])
+
             self.log_status("Process Account", "success", f"Account {self.mask_account(email)} processed successfully")
         else:
             self.log_status("Process Account", "failed", error="Invalid response data")
@@ -644,5 +625,5 @@ if __name__ == "__main__":
         print(
             f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
             f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-            f"{Fore.RED + Style.BRIGHT}[ EXIT ] Dawn Validator - BOT{Style.RESET_ALL}                                      ",                                       
+            f"{Fore.RED + Style.BRIGHT}[ EXIT ] Dawn - BOT{Style.RESET_ALL}                                      ",                                       
         )
