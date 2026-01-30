@@ -292,7 +292,7 @@ class Dawn:
                     print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter 'y' or 'n'.{Style.RESET_ALL}")
     
     async def enusre_ok(self, response):
-        if response.status >= 400 or response.status < 500:
+        if response.status >= 400 and response.status < 500:
             raise Exception(f"HTTP: {response.status}:{await response.text()}")
         
     async def check_connection(self, proxy_url=None):
