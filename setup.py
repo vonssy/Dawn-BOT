@@ -291,6 +291,10 @@ class Dawn:
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter 'y' or 'n'.{Style.RESET_ALL}")
     
+    async def enusre_ok(self, response):
+        if response.status >= 400 or response.status < 500:
+            raise Exception(f"HTTP: {response.status}:{await response.text()}")
+        
     async def check_connection(self, proxy_url=None):
         url = "https://api.ipify.org?format=json"
         
@@ -298,7 +302,7 @@ class Dawn:
             connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             async with ClientSession(connector=connector, timeout=ClientTimeout(total=15)) as session:
                 async with session.get(url=url, proxy=proxy, proxy_auth=proxy_auth) as response:
-                    response.raise_for_status()
+                    await self.enusre_ok(response)
                     self.log_status("Check Connection", "success", "Connection OK")
                     return True
         except (Exception, ClientResponseError) as e:
@@ -381,7 +385,7 @@ class Dawn:
                 connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
                     async with session.post(url=url, headers=headers, json=payload, proxy=proxy, proxy_auth=proxy_auth) as response:
-                        response.raise_for_status()
+                        await self.enusre_ok(response)
                         self.log_status("Request OTP", "success", "OTP request sent")
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -408,7 +412,7 @@ class Dawn:
                 connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
                     async with session.post(url=url, headers=headers, json=payload, proxy=proxy, proxy_auth=proxy_auth) as response:
-                        response.raise_for_status()
+                        await self.enusre_ok(response)
                         self.log_status("Authenticate OTP", "success", "OTP verified successfully")
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -434,8 +438,7 @@ class Dawn:
                 connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
                     async with session.get(url=url, headers=headers, params=params, proxy=proxy, proxy_auth=proxy_auth) as response:
-                        print(f"{response.status}:{await response.text()}")
-                        if response.status == 403: return None
+                        await self.enusre_ok(response)
                         response.raise_for_status()
                         self.log_status("JWT Authentication", "success", "JWT token obtained")
                         return await response.json()
@@ -452,7 +455,7 @@ class Dawn:
         while True:
             if self.USE_PROXY:
                 proxy_url = self.get_next_proxy_for_account(email)
-                
+
             self.log(
                 f"{Fore.CYAN+Style.BRIGHT}Proxy  :{Style.RESET_ALL}"
                 f"{Fore.WHITE+Style.BRIGHT} {self.display_proxy(proxy_url)} {Style.RESET_ALL}"
@@ -488,7 +491,7 @@ class Dawn:
             f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
             f"{Fore.CYAN + Style.BRIGHT}Action :{Style.RESET_ALL}"
         )
-        otp_code = input(f"{timestamp}{Fore.BLUE + Style.BRIGHT} Enter OTP Code -> {Style.RESET_ALL}")
+        otp_code = input(f"{timestamp}{Fore.BLUE + Style.BRIGHT} Enter OTP Code -> {Style.RESET_ALL}").strip()
 
         authenticate = await self.authenticate_otp(email, otp_code, proxy_url)
         if not authenticate: return
@@ -527,6 +530,11 @@ class Dawn:
             self.print_question()
             self.clear_terminal()
             self.welcome()
+
+            self.log(
+                f"{Fore.GREEN + Style.BRIGHT}Account's Total: {Style.RESET_ALL}"
+                f"{Fore.WHITE + Style.BRIGHT}{len(emails)}{Style.RESET_ALL}"
+            )
 
             if self.USE_PROXY: self.load_proxies()
 
