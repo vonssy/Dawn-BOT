@@ -7,7 +7,7 @@ from aiohttp import (
 from aiohttp_socks import ProxyConnector
 from datetime import datetime, timezone
 from colorama import *
-import asyncio, json, pytz, re, os
+import asyncio, random, json, pytz, re, os
 
 wib = pytz.timezone('Asia/Jakarta')
 
@@ -18,8 +18,6 @@ class Dawn:
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
-        self.sessions = {}
-        self.ua_index = 0
         self.accounts = {}
         
         self.USER_AGENTS = [
@@ -156,11 +154,6 @@ class Dawn:
             local, domain = account.split('@', 1)
             mask_account = local[:3] + '*' * 3 + local[-3:]
             return f"{mask_account}@{domain}"
-        
-    def get_next_user_agent(self):
-        ua = self.USER_AGENTS[self.ua_index]
-        self.ua_index = (self.ua_index + 1) % len(self.USER_AGENTS)
-        return ua
 
     def initialize_headers(self, email: str):
         if email not in self.HEADERS:
@@ -175,36 +168,10 @@ class Dawn:
                 "Sec-Fetch-Dest": "empty",
                 "Sec-Fetch-Mode": "cors",
                 "Sec-Fetch-Site": "cross-site",
-                "User-Agent": self.get_next_user_agent()
+                "User-Agent": random.choice(self.USER_AGENTS)
             }
 
         return self.HEADERS[email].copy()
-    
-    def get_session(self, email: str, proxy_url=None, timeout=60):
-        if email not in self.sessions:
-            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
-            
-            session = ClientSession(
-                connector=connector,
-                timeout=ClientTimeout(total=timeout)
-            )
-            
-            self.sessions[email] = {
-                'session': session,
-                'proxy': proxy,
-                'proxy_auth': proxy_auth
-            }
-        
-        return self.sessions[email]
-    
-    async def recreate_session_with_new_proxy(self, email: str, proxy_url: str):
-        if email in self.sessions:
-            old_session = self.sessions[email]["session"]
-            if not old_session.closed:
-                await old_session.close()
-            del self.sessions[email]
-
-        return self.get_session(email, proxy_url)
     
     def print_message(self, email, proxy, color, message):
         self.log(
@@ -252,16 +219,11 @@ class Dawn:
         url = "https://api.ipify.org?format=json"
         
         try:
-            session_info = self.get_session(email, proxy_url, 15)
-            session = session_info["session"]
-            proxy = session_info["proxy"]
-            proxy_auth = session_info["proxy_auth"]
-
-            async with session.get(
-                url=url, proxy=proxy, proxy_auth=proxy_auth
-            ) as response:
-                response.raise_for_status()
-                return True
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
+            async with ClientSession(connector=connector, timeout=ClientTimeout(total=15)) as session:
+                async with session.get(url=url, proxy=proxy, proxy_auth=proxy_auth) as response:
+                    response.raise_for_status()
+                    return True
         except (Exception, ClientResponseError) as e:
             self.print_message(
                 email, 
@@ -280,19 +242,14 @@ class Dawn:
         
         for attempt in range(retries):
             try:
-                session_info = self.get_session(email, proxy_url)
-                session = session_info["session"]
-                proxy = session_info["proxy"]
-                proxy_auth = session_info["proxy_auth"]
-
-                async with session.get(
-                    url=url, headers=headers, params=params, proxy=proxy, proxy_auth=proxy_auth
-                ) as response:
-                    if response.status == 401:
-                        self.print_message(email, proxy, Fore.RED, f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}Token Already Expired")
-                        return None
-                    response.raise_for_status()
-                    return await response.json()
+                connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
+                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
+                    async with session.get(url=url, headers=headers, params=params, proxy=proxy, proxy_auth=proxy_auth) as response:
+                        if response.status == 401:
+                            self.print_message(email, proxy, Fore.RED, f"GET Earning Failed: {Fore.YELLOW+Style.BRIGHT}Token Already Expired")
+                            return None
+                        response.raise_for_status()
+                        return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
@@ -320,24 +277,19 @@ class Dawn:
         }
         for attempt in range(retries):
             try:
-                session_info = self.get_session(email, proxy_url)
-                session = session_info["session"]
-                proxy = session_info["proxy"]
-                proxy_auth = session_info["proxy_auth"]
-
-                async with session.post(
-                    url=url, headers=headers, params=params, json=payload, proxy=proxy, proxy_auth=proxy_auth
-                ) as response:
+                connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
+                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
+                    async with session.post(url=url, headers=headers, params=params, json=payload, proxy=proxy, proxy_auth=proxy_auth) as response:
+                            
+                        if response.status == 401:
+                            self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Token Already Expired")
+                            return None
+                        elif response.status == 429:
+                            self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Too Many Request")
+                            return None
                         
-                    if response.status == 401:
-                        self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Token Already Expired")
-                        return None
-                    elif response.status == 429:
-                        self.print_message(email, proxy, Fore.RED, f"PING Failed: {Fore.YELLOW+Style.BRIGHT}Too Many Request")
-                        return None
-                    
-                    response.raise_for_status()
-                    return await response.json()
+                        response.raise_for_status()
+                        return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
@@ -361,7 +313,6 @@ class Dawn:
             
             if self.ROTATE_PROXY:
                 proxy_url = self.rotate_proxy_for_account(email)
-                await self.recreate_session_with_new_proxy(email, proxy_url)
                 
             await asyncio.sleep(1)
             
@@ -369,7 +320,7 @@ class Dawn:
         while True:
             if self.USE_PROXY:
                 proxy_url = self.get_next_proxy_for_account(email)
-
+                
             user = await self.user_point(email, proxy_url)
             if user:
                 node_points = user.get("points", 0)
@@ -420,12 +371,13 @@ class Dawn:
         
     async def process_accounts(self, email: str):
         is_valid = await self.process_check_connection(email)
-        if is_valid:
-            tasks = [
-                asyncio.create_task(self.process_user_earning(email)),
-                asyncio.create_task(self.process_send_keepalive(email))
-            ]
-            await asyncio.gather(*tasks)
+        if not is_valid: return False
+
+        tasks = [
+            asyncio.create_task(self.process_user_earning(email)),
+            asyncio.create_task(self.process_send_keepalive(email))
+        ]
+        await asyncio.gather(*tasks)
     
     async def main(self):
         try:
@@ -475,10 +427,6 @@ class Dawn:
         except Exception as e:
             self.log(f"{Fore.RED+Style.BRIGHT}Error: {e}{Style.RESET_ALL}")
             raise e
-        finally:
-            for s in self.sessions.values():
-                if not s["session"].closed:
-                    await s["session"].close()
 
 if __name__ == "__main__":
     try:

@@ -26,8 +26,6 @@ class Dawn:
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
-        self.sessions = {}
-        self.ua_index = 0
         
         self.USER_AGENTS = [
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -220,18 +218,13 @@ class Dawn:
             local, domain = account.split('@', 1)
             mask_account = local[:3] + '*' * 3 + local[-3:]
             return f"{mask_account}@{domain}"
-        
-    def get_next_user_agent(self):
-        ua = self.USER_AGENTS[self.ua_index]
-        self.ua_index = (self.ua_index + 1) % len(self.USER_AGENTS)
-        return ua
 
     def initialize_headers(self, email: str, header_type: str):
         if email not in self.HEADERS:
             self.HEADERS[email] = {}
 
         if "ua" not in self.HEADERS[email]:
-            self.HEADERS[email]["ua"] = self.get_next_user_agent()
+            self.HEADERS[email]["ua"] = random.choice(self.USER_AGENTS)
 
         ua = self.HEADERS[email]["ua"]
 
@@ -268,32 +261,6 @@ class Dawn:
             self.HEADERS[email][header_type] = headers
 
         return self.HEADERS[email][header_type].copy()
-    
-    def get_session(self, email: str, proxy_url=None, timeout=60):
-        if email not in self.sessions:
-            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
-            
-            session = ClientSession(
-                connector=connector,
-                timeout=ClientTimeout(total=timeout)
-            )
-            
-            self.sessions[email] = {
-                'session': session,
-                'proxy': proxy,
-                'proxy_auth': proxy_auth
-            }
-        
-        return self.sessions[email]
-    
-    async def recreate_session_with_new_proxy(self, email: str, proxy_url: str):
-        if email in self.sessions:
-            old_session = self.sessions[email]["session"]
-            if not old_session.closed:
-                await old_session.close()
-            del self.sessions[email]
-
-        return self.get_session(email, proxy_url)
 
     def print_question(self):
         while True:
@@ -324,87 +291,77 @@ class Dawn:
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter 'y' or 'n'.{Style.RESET_ALL}")
     
-    async def check_connection(self, email: str, proxy_url=None):
+    async def check_connection(self, proxy_url=None):
         url = "https://api.ipify.org?format=json"
         
         try:
-            session_info = self.get_session(email, proxy_url, 15)
-            session = session_info["session"]
-            proxy = session_info["proxy"]
-            proxy_auth = session_info["proxy_auth"]
-
-            async with session.get(
-                url=url, proxy=proxy, proxy_auth=proxy_auth
-            ) as response:
-                response.raise_for_status()
-                self.log_status("Check Connection", "success", "Connection OK")
-                return True
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
+            async with ClientSession(connector=connector, timeout=ClientTimeout(total=15)) as session:
+                async with session.get(url=url, proxy=proxy, proxy_auth=proxy_auth) as response:
+                    response.raise_for_status()
+                    self.log_status("Check Connection", "success", "Connection OK")
+                    return True
         except (Exception, ClientResponseError) as e:
             self.log_status("Check Connection", "failed", error=e)
             return None
         
-    async def solve_turnstile(self, email: str, proxy_url=None, max_attempts: int = 30):
+    async def solve_turnstile(self, proxy_url=None, max_attempts: int = 30):
         try:
-            session_info = self.get_session(email, proxy_url)
-            session = session_info["session"]
-            proxy = session_info["proxy"]
-            proxy_auth = session_info["proxy_auth"]
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
 
-            create_url = f"{self.CAPTCHA['solver_api']}/createTask"
-            create_payload = {
-                "clientKey": self.captcha_key,
-                "task": {
-                    "type": "TurnstileTaskProxyless",
-                    "websiteURL": self.CAPTCHA["page_url"],
-                    "websiteKey": self.CAPTCHA["site_key"],
-                }
-            }
+            async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
 
-            async with session.post(
-                url=create_url, json=create_payload, proxy=proxy, proxy_auth=proxy_auth
-            ) as r1:
-                r1.raise_for_status()
-                res_text1 = await r1.text()
-
-                res_json1 = json.loads(res_text1)
-                if res_json1.get("errorId") != 0:
-                    self.log_status("Captcha", "failed", error={res_json1.get('errorDescription')})
-                    return None
-
-                task_id = res_json1.get("taskId")
-                self.log_status("Captcha", "success", f"Task Id: {task_id}")
-
-                result_url = f"{self.CAPTCHA['solver_api']}/getTaskResult"
-                result_payload = {
+                create_url = f"{self.CAPTCHA['solver_api']}/createTask"
+                create_payload = {
                     "clientKey": self.captcha_key,
-                    "taskId": task_id
+                    "task": {
+                        "type": "TurnstileTaskProxyless",
+                        "websiteURL": self.CAPTCHA["page_url"],
+                        "websiteKey": self.CAPTCHA["site_key"],
+                    }
                 }
 
-                for attempt in range(max_attempts):
-                    await asyncio.sleep(3)
+                async with session.post(url=create_url, json=create_payload, proxy=proxy, proxy_auth=proxy_auth) as r1:
+                    r1.raise_for_status()
+                    res_text1 = await r1.text()
 
-                    async with session.post(
-                        url=result_url, json=result_payload, proxy=proxy, proxy_auth=proxy_auth
-                    ) as r2:
-                        r2.raise_for_status()
-                        res_text2 = await r2.text()
+                    res_json1 = json.loads(res_text1)
+                    if res_json1.get("errorId") != 0:
+                        self.log_status("Captcha", "failed", error={res_json1.get('errorDescription')})
+                        return None
 
-                        res_json2 = json.loads(res_text2)
-                        if res_json2.get("errorId") != 0:
-                            self.log_status("Captcha", "failed", error={res_json2.get('errorDescription')})
-                            return None
+                    task_id = res_json1.get("taskId")
+                    self.log_status("Captcha", "success", f"Task Id: {task_id}")
 
-                        status = res_json2.get("status")
-                        if status == "ready":
-                            turnstile_token = res_json2.get("solution", {}).get("token")
-                            self.log_status("Captcha", "success", "Turnstile token obtained")
-                            return turnstile_token
-                        if status == "processing":
-                            self.log_status("Captcha", "retry", f"Attempt {attempt + 1}/{max_attempts}")
-                            continue
+                    result_url = f"{self.CAPTCHA['solver_api']}/getTaskResult"
+                    result_payload = {
+                        "clientKey": self.captcha_key,
+                        "taskId": task_id
+                    }
 
-            self.log_status("Captcha", "failed", "Timeout")
-            return None
+                    for attempt in range(max_attempts):
+                        await asyncio.sleep(3)
+
+                        async with session.post(url=result_url, json=result_payload, proxy=proxy, proxy_auth=proxy_auth) as r2:
+                            r2.raise_for_status()
+                            res_text2 = await r2.text()
+
+                            res_json2 = json.loads(res_text2)
+                            if res_json2.get("errorId") != 0:
+                                self.log_status("Captcha", "failed", error={res_json2.get('errorDescription')})
+                                return None
+
+                            status = res_json2.get("status")
+                            if status == "ready":
+                                turnstile_token = res_json2.get("solution", {}).get("token")
+                                self.log_status("Captcha", "success", "Turnstile token obtained")
+                                return turnstile_token
+                            if status == "processing":
+                                self.log_status("Captcha", "retry", f"Attempt {attempt + 1}/{max_attempts}")
+                                continue
+
+                self.log_status("Captcha", "failed", "Timeout")
+                return None
 
         except Exception as e:
             self.log_status("Captcha", "failed", error=e)
@@ -421,17 +378,12 @@ class Dawn:
         
         for attempt in range(retries):
             try:
-                session_info = self.get_session(email, proxy_url)
-                session = session_info["session"]
-                proxy = session_info["proxy"]
-                proxy_auth = session_info["proxy_auth"]
-
-                async with session.post(
-                    url=url, headers=headers, json=payload, proxy=proxy, proxy_auth=proxy_auth
-                ) as response:
-                    response.raise_for_status()
-                    self.log_status("Request OTP", "success", "OTP request sent")
-                    return await response.json()
+                connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
+                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
+                    async with session.post(url=url, headers=headers, json=payload, proxy=proxy, proxy_auth=proxy_auth) as response:
+                        response.raise_for_status()
+                        self.log_status("Request OTP", "success", "OTP request sent")
+                        return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     self.log_status("Request OTP", "retry", f"Attempt {attempt + 1}/{retries}")
@@ -453,17 +405,12 @@ class Dawn:
         
         for attempt in range(retries):
             try:
-                session_info = self.get_session(email, proxy_url)
-                session = session_info["session"]
-                proxy = session_info["proxy"]
-                proxy_auth = session_info["proxy_auth"]
-
-                async with session.post(
-                    url=url, headers=headers, json=payload, proxy=proxy, proxy_auth=proxy_auth
-                ) as response:
-                    response.raise_for_status()
-                    self.log_status("Authenticate OTP", "success", "OTP verified successfully")
-                    return await response.json()
+                connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
+                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
+                    async with session.post(url=url, headers=headers, json=payload, proxy=proxy, proxy_auth=proxy_auth) as response:
+                        response.raise_for_status()
+                        self.log_status("Authenticate OTP", "success", "OTP verified successfully")
+                        return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     self.log_status("Authenticate OTP", "retry", f"Attempt {attempt + 1}/{retries}")
@@ -484,17 +431,14 @@ class Dawn:
         
         for attempt in range(retries):
             try:
-                session_info = self.get_session(email, proxy_url)
-                session = session_info["session"]
-                proxy = session_info["proxy"]
-                proxy_auth = session_info["proxy_auth"]
-
-                async with session.get(
-                    url=url, headers=headers, params=params, proxy=proxy, proxy_auth=proxy_auth
-                ) as response:
-                    response.raise_for_status()
-                    self.log_status("JWT Authentication", "success", "JWT token obtained")
-                    return await response.json()
+                connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
+                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
+                    async with session.get(url=url, headers=headers, params=params, proxy=proxy, proxy_auth=proxy_auth) as response:
+                        print(f"{response.status}:{await response.text()}")
+                        if response.status == 403: return None
+                        response.raise_for_status()
+                        self.log_status("JWT Authentication", "success", "JWT token obtained")
+                        return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     self.log_status("JWT Authentication", "retry", f"Attempt {attempt + 1}/{retries}")
@@ -506,32 +450,34 @@ class Dawn:
         
     async def process_check_connection(self, email: str, proxy_url=None):
         while True:
+            if self.USE_PROXY:
+                proxy_url = self.get_next_proxy_for_account(email)
+                
             self.log(
                 f"{Fore.CYAN+Style.BRIGHT}Proxy  :{Style.RESET_ALL}"
                 f"{Fore.WHITE+Style.BRIGHT} {self.display_proxy(proxy_url)} {Style.RESET_ALL}"
             )
 
-            is_valid = await self.check_connection(email, proxy_url)
+            is_valid = await self.check_connection(proxy_url)
             if is_valid: return True
             
             if self.ROTATE_PROXY:
                 proxy_url = self.rotate_proxy_for_account(email)
-                await self.recreate_session_with_new_proxy(email, proxy_url)
                 await asyncio.sleep(1)
                 continue
 
             return False
 
     async def process_accounts(self, email: str, proxy_url=None):
-        if self.USE_PROXY:
-            proxy_url = self.get_next_proxy_for_account(email)
-
         is_valid = await self.process_check_connection(email, proxy_url)
         if not is_valid:
             self.log_status("Process Account", "failed", error="Connection check failed")
             return
+        
+        if self.USE_PROXY:
+            proxy_url = self.get_next_proxy_for_account(email)
 
-        turnstile_token = await self.solve_turnstile(email)
+        turnstile_token = await self.solve_turnstile()
         if not turnstile_token: return
 
         request = await self.request_otp(email, turnstile_token, proxy_url)
@@ -606,16 +552,9 @@ class Dawn:
                 await self.process_accounts(email)
                 await asyncio.sleep(random.uniform(2.0, 3.0))
 
-        except FileNotFoundError:
-            self.log_status("File Loading", "failed", error="File 'emails.txt' not found")
-            return
         except Exception as e:
             self.log_status("Main Process", "failed", error=e)
             raise e
-        finally:
-            for s in self.sessions.values():
-                if not s["session"].closed:
-                    await s["session"].close()
 
 if __name__ == "__main__":
     try:
