@@ -112,6 +112,12 @@ python3 setup.py
 > - Extracts bearer tokens automatically
 > - Saves tokens to `tokens.json` for the bot to use
 
+## Alternative: get-sessiontoken.py (No captcha key required)
+Note: The setup.py script in this project automates login and token extraction but depends on a captcha-solving provider (2captcha) for bypassing the turnstile. Not every user has a 2captcha key or wants to purchase one.
+
+If you already have a tokens.json file that contains account entries with an email and a privyToken field (for example, obtained from setup.py when you had a key, or added manually), you can use the included get-sessiontoken.py script to obtain the missing sessionToken values directly from the Dawn API without needing any captcha API key.
+
+
 ### Start the Bot
 
 After running the setup, launch the Dawn Validator BOT:
